@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KOL 合作決策輔助系統</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EEF1F6; --surface:#FFFFFF; --sunk:#E4E8EF; --ink:#172036; --muted:#5A6378; --line:#D5DBE5;
+  --accent:#2B50E8; --accent-ink:#FFFFFF; --accent-soft:#E3E9FF;
+  --c-fit:#2B50E8; --c-er:#7B5CF0; --c-reach:#0E9AAE; --c-cost:#8E9AB0; --c-pen:#C2413A;
+  --good:#1D7F55; --warn:#A8690F; --bad:#C2413A;
+  --good-soft:#DDF2E8; --warn-soft:#FBEBD2; --bad-soft:#F8DEDC;
+  --p-IG:#C13584; --p-YouTube:#D92B2B; --p-TikTok:#0A8F95; --p-X:#2A2F3A;
+  --num:"Space Grotesk","Noto Sans TC",system-ui,sans-serif;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0D1320; --surface:#151D2E; --sunk:#1C2539; --ink:#E5E9F1; --muted:#98A2B7; --line:#2A3449;
+    --accent:#7290FF; --accent-ink:#0D1320; --accent-soft:#1F2B52;
+    --c-fit:#7290FF; --c-er:#A28BFF; --c-reach:#38C2D4; --c-cost:#6C778D; --c-pen:#F0716A;
+    --good:#4CC28E; --warn:#E5A84A; --bad:#F0716A;
+    --good-soft:#143326; --warn-soft:#3A2A10; --bad-soft:#3D1A19;
+    --p-IG:#E86BB0; --p-YouTube:#FF6B6B; --p-TikTok:#3FD0D6; --p-X:#C9CED8;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0D1320; --surface:#151D2E; --sunk:#1C2539; --ink:#E5E9F1; --muted:#98A2B7; --line:#2A3449;
+  --accent:#7290FF; --accent-ink:#0D1320; --accent-soft:#1F2B52;
+  --c-fit:#7290FF; --c-er:#A28BFF; --c-reach:#38C2D4; --c-cost:#6C778D; --c-pen:#F0716A;
+  --good:#4CC28E; --warn:#E5A84A; --bad:#F0716A;
+  --good-soft:#143326; --warn-soft:#3A2A10; --bad-soft:#3D1A19;
+  --p-IG:#E86BB0; --p-YouTube:#FF6B6B; --p-TikTok:#3FD0D6; --p-X:#C9CED8;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Noto Sans TC",system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;font-size:15px;line-height:1.6}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--num);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+
+.top{max-width:1240px;margin:0 auto;padding:28px 24px 0;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px}
+.top h1{margin:0;font-size:24px;line-height:1.25;font-weight:700}
+.top p{margin:4px 0 0;color:var(--muted);font-size:14px}
+.sync{font-size:13px;color:var(--muted)}
+nav.tabs{max-width:1240px;margin:20px auto 0;padding:0 24px;display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
+nav.tabs a{padding:10px 16px;text-decoration:none;color:var(--muted);font-weight:500;border-bottom:3px solid transparent;margin-bottom:-1px;white-space:nowrap}
+nav.tabs a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accent)}
+main{max-width:1240px;margin:0 auto;padding:24px 24px 64px}
+section.view[hidden]{display:none}
+
+h2{font-size:19px;margin:0 0 4px;line-height:1.35}
+h3{font-size:16px;margin:0 0 8px}
+.hint{color:var(--muted);font-size:13.5px;margin:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px}
+
+/* recommend layout */
+.rec{display:grid;grid-template-columns:330px minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:960px){.rec{grid-template-columns:1fr}}
+.brief{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px);background:var(--ink);color:var(--paper);border-radius:12px;padding:22px}
+@media (max-width:960px){.brief{position:static}}
+.brief h2{color:var(--paper)}
+.brief .hint{color:color-mix(in srgb,var(--paper) 70%,transparent)}
+.field{margin-top:16px}
+.field>label,.field>.lbl{display:block;font-size:13px;font-weight:500;margin-bottom:6px;color:color-mix(in srgb,var(--paper) 80%,transparent)}
+.brief input[type=number],.brief input[type=text],.brief select{width:100%;background:color-mix(in srgb,var(--paper) 10%,transparent);border:1px solid color-mix(in srgb,var(--paper) 25%,transparent);border-radius:8px;padding:9px 11px;color:var(--paper)}
+.brief select option{color:#172036;background:#fff}
+.budget input{font-family:var(--num);font-size:22px;font-weight:700}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:color-mix(in srgb,var(--paper) 10%,transparent);border-radius:9px;padding:4px}
+.seg label{position:relative;text-align:center;padding:7px 0;border-radius:6px;cursor:pointer;font-size:14px;color:color-mix(in srgb,var(--paper) 80%,transparent)}
+.seg input{position:absolute;opacity:0;inset:0;cursor:pointer}
+.seg label:has(input:checked){background:var(--paper);color:var(--ink);font-weight:700}
+.seg label:has(input:focus-visible){outline:2px solid var(--accent)}
+.plats{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.plats label{display:flex;align-items:center;gap:8px;font-size:14px;padding:6px 10px;border:1px solid color-mix(in srgb,var(--paper) 25%,transparent);border-radius:8px;cursor:pointer}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.check{display:flex;gap:8px;align-items:flex-start;font-size:14px;margin-top:16px;cursor:pointer}
+.check input{margin-top:5px}
+
+/* results */
+.summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.summary div{padding:14px 16px;border-left:1px solid var(--line)}
+.summary div:first-child{border-left:0}
+.summary span{display:block;font-size:12.5px;color:var(--muted)}
+.summary b{display:block;font-family:var(--num);font-size:22px;line-height:1.3;font-variant-numeric:tabular-nums}
+@media (max-width:720px){.summary{grid-template-columns:1fr 1fr}.summary div{border-left:0;border-top:1px solid var(--line)}.summary div:nth-child(-n+2){border-top:0}.summary div:nth-child(even){border-left:1px solid var(--line)}}
+.roi-pos{color:var(--good)} .roi-neg{color:var(--bad)}
+.reshead{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;margin:24px 0 10px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.hatch{background:repeating-linear-gradient(135deg,var(--c-pen) 0 2px,transparent 2px 5px);border:1px solid var(--c-pen)}
+
+.pick{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:10px;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:8px 24px}
+@media (max-width:720px){.pick{grid-template-columns:1fr}}
+.who{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.who strong{font-size:16px}
+.who .handle{color:var(--muted);font-size:13px}
+.chip{display:inline-block;font-size:12px;font-weight:700;padding:1px 8px;border-radius:999px;color:#fff;line-height:1.6}
+.chip.IG{background:var(--p-IG)} .chip.YouTube{background:var(--p-YouTube)} .chip.TikTok{background:var(--p-TikTok)} .chip.X{background:var(--p-X);color:var(--paper)}
+.tags{display:inline-flex;flex-wrap:wrap;gap:4px}
+.tag.hit{background:var(--accent-soft);color:var(--accent);font-weight:700}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;background:var(--sunk);color:var(--muted)}
+.risk{display:inline-block;font-size:12px;font-weight:700;padding:1px 8px;border-radius:999px}
+.risk.low{background:var(--good-soft);color:var(--good)} .risk.mid{background:var(--warn-soft);color:var(--warn)} .risk.high{background:var(--bad-soft);color:var(--bad)}
+
+.score{display:flex;align-items:center;gap:12px;margin-top:10px}
+.score .total{font-family:var(--num);font-weight:700;font-size:30px;line-height:1;min-width:52px;font-variant-numeric:tabular-nums}
+.bar{position:relative;flex:1;height:14px;background:var(--sunk);border-radius:4px;overflow:hidden;display:flex}
+.bar.big{height:22px}
+.bar span{height:100%}
+.bar .pen{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(135deg,var(--c-pen) 0 2px,transparent 2px 5px);border-left:2px solid var(--c-pen)}
+.s-fit{background:var(--c-fit)} .s-er{background:var(--c-er)} .s-reach{background:var(--c-reach)} .s-cost{background:var(--c-cost)}
+.why{margin:10px 0 0;padding:0;list-style:none;font-size:13.5px}
+.why li{padding-left:16px;position:relative;margin-top:2px}
+.why li::before{content:"";position:absolute;left:2px;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--good)}
+.why li.warn::before{background:var(--bad)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 12px;align-content:start}
+.kpis div span{display:block;font-size:12px;color:var(--muted)}
+.kpis div b{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:17px}
+.price{font-family:var(--num);font-weight:700}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:500}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.small{padding:4px 10px;font-size:13px}
+.btn.danger{color:var(--bad)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.inline{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inline input[type=text]{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;min-width:220px}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:10px;padding:28px;text-align:center}
+.empty p{margin:0 0 14px;color:var(--muted)}
+.note{font-size:13.5px;color:var(--muted);margin-top:14px}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 20px);transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:8px;font-size:14px;z-index:20;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+
+/* ranking */
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:16px 0}
+.filters select{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 10px}
+.rank details{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
+.rank summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:34px minmax(0,1.5fr) 90px 80px minmax(140px,1.6fr) 60px;gap:12px;align-items:center;padding:12px 16px}
+.rank summary::-webkit-details-marker{display:none}
+.rank .no{font-family:var(--num);color:var(--muted);font-weight:700}
+.rank .tot{font-family:var(--num);font-weight:700;font-size:20px;text-align:right}
+.rank .col{font-size:13px}
+.rank .col span{display:block;color:var(--muted);font-size:11.5px}
+@media (max-width:760px){.rank summary{grid-template-columns:28px minmax(0,1fr) 54px}.rank .col,.rank .barcell{display:none}}
+.detail{border-top:1px solid var(--line);padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
+.scroll{overflow-x:auto}
+table.t{border-collapse:collapse;width:100%;font-size:13.5px}
+table.t th,table.t td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.t th{font-weight:500;color:var(--muted);font-size:12.5px}
+table.t td.n,table.t th.n{text-align:right;font-family:var(--num);font-variant-numeric:tabular-nums}
+
+/* review */
+.cols{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:960px){.cols{grid-template-columns:1fr}}
+.camp{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:16px;overflow:hidden}
+.camp>header{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 16px;background:var(--sunk)}
+.rec-row{padding:12px 16px;border-top:1px solid var(--line)}
+.rec-row:first-of-type{border-top:0}
+.rec-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 16px;margin-top:8px;font-size:13.5px}
+.rec-grid .k{color:var(--muted);font-size:12px}
+.rec-grid b{font-family:var(--num);font-variant-numeric:tabular-nums}
+.err{font-family:var(--num);font-size:12.5px;font-weight:700;padding:0 6px;border-radius:4px;margin-left:4px}
+.err.g{background:var(--good-soft);color:var(--good)} .err.w{background:var(--warn-soft);color:var(--warn)} .err.b{background:var(--bad-soft);color:var(--bad)}
+.fill{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:8px;margin-top:10px;align-items:end}
+@media (max-width:640px){.fill{grid-template-columns:1fr 1fr}}
+.fill label{font-size:12px;color:var(--muted)}
+.fill input{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:6px 8px;font-family:var(--num)}
+.pill{font-size:12px;padding:1px 8px;border-radius:999px;background:var(--warn-soft);color:var(--warn);font-weight:700}
+.pill.done{background:var(--good-soft);color:var(--good)}
+.cmp{margin-top:10px}
+.cmp .r{display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px;align-items:center;margin-bottom:10px;font-size:13px}
+.cmp .bars div{height:9px;border-radius:3px;margin:2px 0}
+.cmp .pb{background:var(--c-cost)} .cmp .ab{background:var(--accent)}
+.big-num{font-family:var(--num);font-size:28px;font-weight:700;line-height:1.2}
+
+/* data */
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;align-items:start}
+textarea{width:100%;min-height:120px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em;background:var(--sunk);padding:1px 5px;border-radius:4px}
+.msg{margin-top:10px;font-size:13.5px}
+.msg.ok{color:var(--good)} .msg.bad{color:var(--bad)}
+.yt-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.yt-form label{display:block;font-size:13px;font-weight:500;color:var(--muted);margin-bottom:5px}
+.yt-form input,.yt-form select{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px}
+.yt-form .wide{grid-column:1/-1}
+.prog{margin-top:14px;font-size:14px;color:var(--muted)}
+.prog .bar{height:6px;margin-top:6px}
+.prog .bar span{background:var(--accent);transition:width .2s}
+@media (prefers-reduced-motion:reduce){.prog .bar span{transition:none}}
+.ex{margin:6px 0 0;padding-left:18px;font-size:13.5px;color:var(--muted)}
+table.t td.ck,table.t th.ck{width:32px}
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>KOL 合作決策輔助系統</h1>
+    <p>輸入預算與行銷目標，看推薦哪些 KOL、為什麼，以及預期成效。</p>
+  </div>
+  <div class="sync" id="sync">資料存在這台裝置</div>
+</header>
+<nav class="tabs" aria-label="功能">
+  <a href="#recommend" data-view="recommend">推薦組合</a>
+  <a href="#ranking" data-view="ranking">KOL 排名</a>
+  <a href="#review" data-view="review">結案回填</a>
+  <a href="#youtube" data-view="youtube">YouTube 搜尋</a>
+  <a href="#data" data-view="data">資料與模型</a>
+</nav>
+<main>
+  <section class="view" id="view-recommend">
+    <div class="rec">
+      <form class="brief" id="brief" onsubmit="return false">
+        <h2>合作條件</h2>
+        <p class="hint">改任何一項，右邊推薦會即時更新。</p>
+        <div class="field budget"><label for="f-budget">總預算（新台幣）</label><input id="f-budget" type="number" min="0" step="1000"></div>
+        <div class="field"><span class="lbl">行銷目標</span>
+          <div class="seg" role="radiogroup" aria-label="行銷目標">
+            <label><input type="radio" name="goal" value="exposure">曝光</label>
+            <label><input type="radio" name="goal" value="engage">互動</label>
+            <label><input type="radio" name="goal" value="convert">轉換</label>
+          </div>
+        </div>
+        <div class="field"><label for="f-kw">需求關鍵字</label><input id="f-kw" type="text" autocomplete="off" placeholder="例如：物理治療、運動傷害"><p class="hint" style="margin-top:4px">用頓號或空格分隔，比對 KOL 的內容標籤。</p></div>
+        <div class="row2">
+          <div class="field"><label for="f-gender">目標性別</label><select id="f-gender"><option value="all">不限</option><option value="female">女性為主</option><option value="male">男性為主</option></select></div>
+          <div class="field"><label for="f-age">目標年齡</label><select id="f-age"><option value="all">不限</option></select></div>
+        </div>
+        <div class="field"><span class="lbl">平台</span><div class="plats" id="f-plats"></div></div>
+        <div class="row2">
+          <div class="field"><label for="f-cvr">預估轉換率（%）</label><input id="f-cvr" type="number" min="0" step="0.1"></div>
+          <div class="field"><label for="f-aov">平均客單價</label><input id="f-aov" type="number" min="0" step="50"></div>
+        </div>
+        <div class="field"><label for="f-max">最多合作幾位</label><input id="f-max" type="number" min="1" max="20" step="1"></div>
+        <label class="check"><input type="checkbox" id="f-risk">排除高風險帳號（疑似假粉、刷互動）</label>
+      </form>
+      <div id="rec-out" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <section class="view" id="view-ranking" hidden>
+    <h2>KOL 排名</h2>
+    <p class="hint">分數依「推薦組合」頁的條件計算，藍色標籤代表符合需求關鍵字。點一列看細節。</p>
+    <div class="filters">
+      <select id="r-plat" aria-label="平台"><option value="">全部平台</option></select>
+      <input id="r-cat" type="search" aria-label="篩選標籤或名稱" placeholder="篩選標籤或名稱" style="border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 10px">
+      <select id="r-sort" aria-label="排序">
+        <option value="total">依綜合分</option><option value="er">依互動率</option><option value="followers">依粉絲數</option><option value="risk">依風險（高到低）</option><option value="cpm">依每千次觀看成本（低到高）</option>
+      </select>
+    </div>
+    <div class="legend" style="margin-bottom:10px">
+      <span><i class="s-fit"></i>契合度</span><span><i class="s-er"></i>互動品質</span><span><i class="s-reach"></i>觸及效率</span><span><i class="s-cost"></i>成本效益</span><span><i class="hatch"></i>風險扣分</span>
+    </div>
+    <div class="rank" id="rank-out"></div>
+  </section>
+
+  <section class="view" id="view-review" hidden>
+    <div id="review-out"></div>
+  </section>
+
+  <section class="view" id="view-youtube" hidden>
+    <h2>YouTube 即時搜尋</h2>
+    <p class="hint" style="margin-bottom:16px">用關鍵字找台灣的 YouTuber，直接從 YouTube Data API 抓數據，勾選後加入 KOL 資料，不需要終端機。</p>
+    <div class="panel">
+      <h3>API key</h3>
+      <p class="hint">key 只存在這個分頁的記憶體裡，重新整理或關閉頁面就會清除，不會存檔或同步給任何人。建議到 Google Cloud Console 把這把 key 設定為只允許 YouTube Data API v3。</p>
+      <div class="inline" style="margin-top:10px">
+        <input type="password" id="yt-key" aria-label="YouTube API key" placeholder="AIza…" autocomplete="off" style="min-width:280px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px">
+        <button class="btn" id="yt-test">測試連線</button>
+      </div>
+      <div class="msg" id="yt-test-msg" role="status"></div>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <h3>搜尋條件</h3>
+      <div class="yt-form">
+        <div><label for="yt-q">搜尋關鍵字</label><input id="yt-q" type="text" placeholder="例如：汽車用品 開箱"></div>
+        <div><label for="yt-words">相關詞（判斷影片內容）</label><input id="yt-words" type="text" placeholder="汽車、車用、行車記錄器、改裝"></div>
+        <div><label for="yt-negs">排除詞（可留空）</label><input id="yt-negs" type="text" placeholder="玩具、兒歌、模型"></div>
+        <div><label for="yt-label">分類名稱</label><input id="yt-label" type="text" placeholder="留空 = 第一個相關詞"></div>
+        <div><label for="yt-female">受眾女性比例估計（%）</label><input id="yt-female" type="number" min="0" max="100" value="50"></div>
+        <div><label for="yt-age">主要受眾年齡</label><select id="yt-age"><option>18-24</option><option selected>25-34</option><option>35-44</option><option>45+</option></select></div>
+        <div><label for="yt-want">最多找幾位</label><input id="yt-want" type="number" min="1" max="30" value="15"></div>
+        <div><label for="yt-min">最少訂閱數</label><input id="yt-min" type="number" min="0" step="1000" value="10000"></div>
+      </div>
+      <div class="inline" style="margin-top:14px"><button class="btn primary" id="yt-go">搜尋</button><span class="hint">每次搜尋約用 250 單位額度，每天免費 10,000 單位。</span></div>
+      <div class="prog" id="yt-prog" aria-live="polite"></div>
+    </div>
+    <div id="yt-out" style="margin-top:16px"></div>
+  </section>
+
+  <section class="view" id="view-data" hidden>
+    <div id="data-out"></div>
+  </section>
+</main>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const PRISTINE_HTML='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
+/* ---------- constants ---------- */
+const PLATFORMS=['IG','YouTube','TikTok','X'];
+const PLAT_LABEL={IG:'Instagram',YouTube:'YouTube',TikTok:'TikTok',X:'X'};
+const BENCH={
+  IG:{er:.02,reach:.25,cpm:600,ctr:.015},
+  YouTube:{er:.015,reach:.15,cpm:450,ctr:.02},
+  TikTok:{er:.05,reach:.6,cpm:300,ctr:.01},
+  X:{er:.005,reach:.1,cpm:400,ctr:.01}
+};
+const CAT_TAGS={'美妝保養':['美妝','保養','彩妝'],'時尚穿搭':['穿搭','時尚','服飾'],'運動健身':['健身','運動','重訓'],'美食':['美食','餐廳','料理'],'3C科技':['3C','科技','開箱'],'旅遊':['旅遊','旅行','景點'],'生活風格':['生活','居家','選物'],'遊戲':['遊戲','手遊','實況']};
+const splitTags=t=>String(t||'').split(/[;；,，、\/|\s]+/).map(x=>x.trim()).filter(Boolean);
+const AGES=['18-24','25-34','35-44','45+'];
+const GOALS={
+  exposure:{label:'曝光',w:{fit:.25,er:.15,reach:.35,cost:.25}},
+  engage:{label:'互動',w:{fit:.25,er:.45,reach:.15,cost:.15}},
+  convert:{label:'轉換',w:{fit:.45,er:.25,reach:.10,cost:.20}}
+};
+const PART_LABEL={fit:'契合度',er:'互動品質',reach:'觸及效率',cost:'成本效益'};
+const FIELDS=['name','handle','platform','category','tags','followers','avg_views','avg_likes','avg_comments','posts_30d','growth_30d','price','female_pct','main_age','source'];
+
+const SAMPLE_KOLS=[
+ ['小鹿的保養日記','deer.skincare','IG','美妝保養',86000,24000,2600,180,14,2.1,18000,88,'18-24'],
+ ['Mina 穿搭筆記','mina.ootd','IG','時尚穿搭',152000,41000,3900,210,18,1.5,28000,81,'25-34'],
+ ['阿哲練起來','zhe.trains','IG','運動健身',64000,21000,2400,260,16,3.2,12000,35,'18-24'],
+ ['胖胖吃台北','chubby.eats.tpe','IG','美食',210000,52000,4100,380,22,.8,35000,62,'25-34'],
+ ['Lumi 生活選物','lumi.living','IG','生活風格',98000,15000,650,12,9,34,16000,74,'25-34'],
+ ['Vivi 美妝實驗室','vivi.beautylab','IG','美妝保養',320000,30000,1100,4,12,6,45000,85,'18-24'],
+ ['小島旅行中','island.wander','IG','旅遊',45000,16000,2100,140,10,2.8,8000,66,'25-34'],
+ ['Kai 的 3C 桌面','kai.desksetup','IG','3C科技',38000,12000,1300,160,8,2,7000,18,'25-34'],
+ ['科技宅阿翔','axiang.tech','YouTube','3C科技',420000,95000,4200,680,6,1.1,90000,15,'25-34'],
+ ['Joanne 好好吃','joanne.eats','YouTube','美食',280000,70000,3100,420,8,.9,60000,58,'25-34'],
+ ['一起動吧 Coach Ivy','coachivy','YouTube','運動健身',160000,48000,2600,510,10,2.4,38000,72,'25-34'],
+ ['我們去流浪','wewander.tw','YouTube','旅遊',350000,120000,5200,900,4,1.3,85000,55,'25-34'],
+ ['美妝課代表 Erin','erin.makeup','YouTube','美妝保養',510000,85000,3800,520,5,.4,120000,90,'18-24'],
+ ['遊戲王小寬','kuan.plays','YouTube','遊戲',230000,60000,3500,900,14,1.8,45000,20,'18-24'],
+ ['慢生活頻道','slowlife.ch','YouTube','生活風格',90000,9000,300,40,1,.2,25000,68,'35-44'],
+ ['小魚吃什麼','fishy.eats','TikTok','美食',380000,260000,18000,600,26,4.5,40000,57,'18-24'],
+ ['Ray 健身挑戰','ray.fitchallenge','TikTok','運動健身',520000,300000,31000,1100,30,3.8,55000,40,'18-24'],
+ ['甜甜妝容','sweet.makeup.tt','TikTok','美妝保養',270000,150000,13500,420,22,5,30000,87,'18-24'],
+ ['穿搭小隊長','ootd.captain','TikTok','時尚穿搭',190000,80000,45000,2000,20,9,22000,79,'18-24'],
+ ['3C 開箱一分鐘','unbox.60s','TikTok','3C科技',150000,95000,6200,380,18,6.2,18000,22,'18-24'],
+ ['旅人阿 Ben','ben.travels.tt','TikTok','旅遊',95000,70000,5800,260,12,3.1,12000,52,'25-34'],
+ ['爆紅生活家','viral.home','TikTok','生活風格',600000,40000,2800,30,15,41,50000,70,'18-24'],
+ ['科技評論 Leo','leo_techtalk','X','3C科技',85000,12000,420,60,60,.6,10000,20,'25-34'],
+ ['遊戲情報站','gamenews_tw','X','遊戲',140000,20000,900,110,90,1.2,12000,25,'18-24'],
+ ['吃貨日常','foodie_daily_x','X','美食',42000,6000,210,25,40,.9,4000,55,'25-34'],
+ ['時尚觀察者','fashion_watch','X','時尚穿搭',60000,7000,260,30,45,1,6000,70,'25-34'],
+ ['美妝話題王','beauty_buzz','X','美妝保養',75000,9000,380,70,50,2,8000,78,'18-24'],
+ ['運動數據控','sportsdata_x','X','運動健身',33000,5000,160,22,35,1.5,3500,30,'25-34'],
+ ['物理治療師阿傑','pt.ajie','YouTube','運動保健',180000,52000,2600,420,6,1.6,42000,52,'25-34',['物理治療','復健','運動傷害','肩頸','痠痛']],
+ ['伸展瑜珈 Amy','amy.stretch','IG','運動保健',72000,19000,2100,150,15,2.2,11000,86,'25-34',['瑜珈','伸展','痠痛','健身','上班族']]
+].map((r,i)=>({id:'s'+(i+1),name:r[0],handle:r[1],platform:r[2],category:r[3],tags:r[13]||CAT_TAGS[r[3]]||[r[3]],followers:r[4],avg_views:r[5],avg_likes:r[6],avg_comments:r[7],posts_30d:r[8],growth_30d:r[9],price:r[10],female_pct:r[11],main_age:r[12],source:'範例資料'}));
+
+const DEFAULT_BRIEF={budget:150000,goal:'convert',keywords:'美妝、保養',gender:'female',age:'18-24',platforms:['IG','YouTube','TikTok','X'],cvr:3,aov:1290,maxKol:6,excludeHigh:true};
+const freshCalib=()=>({IG:{views:1,ctr:1,cvr:1},YouTube:{views:1,ctr:1,cvr:1},TikTok:{views:1,ctr:1,cvr:1},X:{views:1,ctr:1,cvr:1}});
+
+let state={kols:SAMPLE_KOLS.map(k=>({...k})),campaigns:[],calib:freshCalib(),calibHistory:[{v:1,date:today(),note:'初始模型（未校正）',calib:freshCalib()}],brief:{...DEFAULT_BRIEF},removed:[]};
+const kolKey=x=>x.platform+'|'+String(x.handle||x.name||'').toLowerCase();
+
+/* ---------- helpers ---------- */
+function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+const clamp=(x,a=0,b=100)=>Math.max(a,Math.min(b,x));
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function fmt(n){if(!isFinite(n))return '—';return Math.round(n).toLocaleString('zh-TW')}
+function fmtW(n){if(!isFinite(n))return '—';const a=Math.abs(n);if(a>=1e8)return (n/1e8).toFixed(1).replace(/\.0$/,'')+' 億';if(a>=1e4)return (n/1e4).toFixed(1).replace(/\.0$/,'')+' 萬';return Math.round(n).toLocaleString('zh-TW')}
+function pct(x,d=1){if(!isFinite(x))return '—';return (x*100).toFixed(d)+'%'}
+function uid(){return Math.random().toString(36).slice(2,10)}
+let toastT;function toast(t){const el=document.getElementById('toast');el.textContent=t;el.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove('on'),2200)}
+
+/* ---------- model ---------- */
+function metrics(k){
+  const b=BENCH[k.platform]||BENCH.IG;
+  const er=k.followers>0?(k.avg_likes+k.avg_comments)/k.followers:0;
+  const reach=k.followers>0?k.avg_views/k.followers:0;
+  const cpm=k.avg_views>0?k.price/k.avg_views*1000:Infinity;
+  const cl=k.avg_likes>0?k.avg_comments/k.avg_likes:0;
+  const flags=[];
+  if(er<b.er*.25)flags.push({p:35,t:`互動率只有平台水準的 ${Math.round(er/b.er*100)}%，可能有大量不活躍或假粉絲`});
+  if(er>b.er*4)flags.push({p:20,t:`互動率是平台水準的 ${(er/b.er).toFixed(1)} 倍，建議檢查是否有刷互動`});
+  if(k.growth_30d>25&&er<b.er*.6)flags.push({p:30,t:`近 30 天粉絲成長 ${k.growth_30d}%，但互動沒有跟上`});
+  if(k.avg_likes>0&&cl<.005)flags.push({p:20,t:`留言數不到按讚數的 0.5%，按讚可能來自機器帳號`});
+  if(k.posts_30d<2)flags.push({p:15,t:`近 30 天只發了 ${k.posts_30d} 篇，帳號不太活躍`});
+  const risk=Math.min(100,flags.reduce((s,f)=>s+f.p,0));
+  return {er,reach,cpm,cl,flags,risk,level:risk>=45?'high':risk>=20?'mid':'low'};
+}
+const RISK_LABEL={low:'低風險',mid:'中風險',high:'高風險'};
+function fitOf(k,br){
+  const kws=splitTags(br.keywords);
+  const terms=[...(k.tags||[]),k.category||'',k.name||''].map(x=>String(x).toLowerCase()).filter(Boolean);
+  const matched=kws.filter(w=>{const q=w.toLowerCase();return terms.some(t=>t.includes(q)||(t.length>=2&&q.includes(t)&&t.length/q.length>=.6))});
+  let cat=kws.length?(matched.length?Math.round(60*(.5+.5*matched.length/kws.length)):0):40;
+  let g=20;
+  if(br.gender==='female')g=20*Math.max(0,1-Math.abs(80-k.female_pct)/60);
+  if(br.gender==='male')g=20*Math.max(0,1-Math.abs(20-k.female_pct)/60);
+  let a=20;
+  if(br.age!=='all'){const i=AGES.indexOf(br.age),j=AGES.indexOf(k.main_age);a=i===j?20:(j>=0&&Math.abs(i-j)===1?10:0)}
+  return {total:Math.round(cat+g+a),cat,g,a,matched,kwCount:kws.length};
+}
+function predict(k,br,fit){
+  const c=state.calib[k.platform]||{views:1,ctr:1,cvr:1};const b=BENCH[k.platform]||BENCH.IG;
+  const base={imp:k.avg_views,ctr:b.ctr*(.5+fit/100),cvr:br.cvr/100};
+  const imp=base.imp*c.views,clicks=imp*base.ctr*c.ctr,conv=clicks*base.cvr*c.cvr,revenue=conv*br.aov;
+  const roi=k.price>0?(revenue-k.price)/k.price:0;
+  const eng=(k.avg_likes+k.avg_comments)*c.views;
+  return {base,imp,clicks,conv,revenue,roi,eng};
+}
+function evaluate(k,br){
+  const m=metrics(k),b=BENCH[k.platform]||BENCH.IG,f=fitOf(k,br);
+  const s={fit:f.total,er:clamp(50*m.er/b.er),reach:clamp(50*m.reach/b.reach),cost:isFinite(m.cpm)?clamp(50*b.cpm/m.cpm):0};
+  if(m.er>b.er*4)s.er=Math.min(s.er,70);
+  const w=GOALS[br.goal].w,parts={};let sum=0;
+  for(const key in w){parts[key]=w[key]*s[key];sum+=parts[key]}
+  const penalty=Math.min(sum,m.risk*.5),total=Math.max(0,sum-penalty);
+  return {k,m,f,s,w,parts,sum,penalty,total,p:predict(k,br,f.total)};
+}
+function recommend(br){
+  const all=state.kols.filter(k=>br.platforms.includes(k.platform)).map(k=>evaluate(k,br));
+  const pool=all.filter(e=>e.f.cat>0&&e.k.price<=br.budget&&!(br.excludeHigh&&e.m.level==='high'));
+  const obj=e=>br.goal==='exposure'?e.p.imp:br.goal==='engage'?e.p.eng:e.p.conv;
+  pool.forEach(e=>e.value=obj(e)/Math.max(1,e.k.price)*(e.total/100));
+  pool.sort((a,b)=>b.value-a.value);
+  let left=br.budget;const picked=[];
+  for(const e of pool){if(picked.length>=br.maxKol)break;if(e.k.price<=left&&e.total>=35){picked.push(e);left-=e.k.price}}
+  picked.sort((a,b)=>b.total-a.total);
+  const riskyOut=br.excludeHigh?all.filter(e=>e.f.cat>0&&e.m.level==='high'):[];
+  return {picked,left,all,riskyOut};
+}
+function reasons(e,br){
+  const r=[],b=BENCH[e.k.platform];
+  if(e.f.matched.length)r.push(`內容標籤符合需求：${e.f.matched.join('、')}${e.f.matched.length<e.f.kwCount?`（${e.f.matched.length}/${e.f.kwCount}）`:''}`);
+  const erx=e.m.er/b.er;if(erx>=1.2)r.push(`互動率 ${pct(e.m.er)}，是 ${PLAT_LABEL[e.k.platform]} 平均的 ${erx.toFixed(1)} 倍`);
+  if(e.m.reach/b.reach>=1.2)r.push(`平均觀看達粉絲數的 ${pct(e.m.reach,0)}`);
+  if(isFinite(e.m.cpm)&&e.m.cpm<b.cpm*.85)r.push(`每千次觀看 NT$${fmt(e.m.cpm)}，低於平台基準 NT$${b.cpm}`);
+  if(br.gender!=='all'&&e.f.g>=16)r.push(`受眾性別接近目標（女性約 ${e.k.female_pct}%）`);
+  const w=[];
+  e.m.flags.forEach(f=>w.push(f.t));
+  if(isFinite(e.m.cpm)&&e.m.cpm>b.cpm*1.5)w.push(`報價偏高：每千次觀看 NT$${fmt(e.m.cpm)}`);
+  return {good:r.slice(0,3),bad:w.slice(0,2)};
+}
+
+/* ---------- storage ---------- */
+const LS_KEY='kol-dss-v1';
+function applyState(s){
+  if(!s||!Array.isArray(s.kols))return;
+  state={...state,...s,brief:{...DEFAULT_BRIEF,...(s.brief||{})},calib:{...freshCalib(),...(s.calib||{})}};
+  (state.campaigns||[]).forEach(c=>{if(c._prev&&!c.actual)c.actual=c._prev;delete c._prev;delete c._editing});
+  state.kols.forEach(k=>{if(!Array.isArray(k.tags))k.tags=splitTags(k.tags).length?splitTags(k.tags):(CAT_TAGS[k.category]||(k.category?[k.category]:[]))});
+  if(s.brief&&!s.brief.keywords&&s.brief.category)state.brief.keywords=(CAT_TAGS[s.brief.category]||[s.brief.category]).slice(0,2).join('、');
+  delete state.brief.category;
+  if(!Array.isArray(state.removed))state.removed=[];
+}
+try{const raw=localStorage.getItem(LS_KEY);if(raw)applyState(JSON.parse(raw))}catch(e){}
+let remoteRef=null,saving=false,pendingSave=false,saveTimer;
+function setSync(t){document.getElementById('sync').textContent=t}
+function persist(){
+  try{localStorage.setItem(LS_KEY,JSON.stringify(state))}catch(e){}
+  clearTimeout(saveTimer);saveTimer=setTimeout(saveRemote,800);
+}
+async function saveRemote(){
+  if(!remoteRef)return;
+  if(saving){pendingSave=true;return}
+  saving=true;
+  try{await remoteRef.set({state:JSON.stringify(state),v:1});setSync('已同步到你的帳號')}
+  catch(e){setSync(e&&e.code==='quota_exceeded'?'資料太大，只存在這台裝置':'同步失敗，資料先存在這台裝置')}
+  saving=false;
+  if(pendingSave){pendingSave=false;saveRemote()}
+}
+async function initRemote(){
+  try{
+    if(!window.claude||!window.claude.use)return;
+    const [db,user]=await Promise.all([window.claude.use('db'),window.claude.use('user')]);
+    if(!db||!user)return;
+    const id=await user.id();if(!id)return;
+    const ref=db.doc('data/users/'+id+'/app');
+    const snap=await ref.get();
+    if(snap.exists){const d=snap.data();if(d&&typeof d.state==='string'){applyState(JSON.parse(d.state));try{localStorage.setItem(LS_KEY,JSON.stringify(state))}catch(e){}renderAll()}}
+    remoteRef=ref;
+    if(!snap.exists)await saveRemote();
+    setSync('已同步到你的帳號');
+  }catch(e){setSync('資料存在這台裝置')}
+}
+
+/* ---------- brief form ---------- */
+function initForm(){
+  const age=document.getElementById('f-age');age.innerHTML+=AGES.map(a=>`<option value="${a}">${a} 歲</option>`).join('');
+  document.getElementById('f-plats').innerHTML=PLATFORMS.map(p=>`<label><input type="checkbox" value="${p}">${PLAT_LABEL[p]}</label>`).join('');
+  document.getElementById('r-plat').innerHTML+=PLATFORMS.map(p=>`<option value="${p}">${PLAT_LABEL[p]}</option>`).join('');
+  fillForm();
+  document.getElementById('brief').addEventListener('input',readForm);
+  document.getElementById('brief').addEventListener('change',readForm);
+  ['r-plat','r-sort'].forEach(id=>document.getElementById(id).addEventListener('change',renderRanking));
+  document.getElementById('r-cat').addEventListener('input',renderRanking);
+}
+function fillForm(){
+  const b=state.brief;
+  document.getElementById('f-budget').value=b.budget;
+  document.querySelectorAll('input[name=goal]').forEach(r=>r.checked=r.value===b.goal);
+  document.getElementById('f-kw').value=b.keywords||'';
+  document.getElementById('f-gender').value=b.gender;
+  document.getElementById('f-age').value=b.age;
+  document.querySelectorAll('#f-plats input').forEach(c=>c.checked=b.platforms.includes(c.value));
+  document.getElementById('f-cvr').value=b.cvr;
+  document.getElementById('f-aov').value=b.aov;
+  document.getElementById('f-max').value=b.maxKol;
+  document.getElementById('f-risk').checked=b.excludeHigh;
+}
+function readForm(){
+  const n=(id,d)=>{const v=parseFloat(document.getElementById(id).value);return isFinite(v)&&v>=0?v:d};
+  state.brief={
+    budget:n('f-budget',0),
+    goal:(document.querySelector('input[name=goal]:checked')||{}).value||'convert',
+    keywords:document.getElementById('f-kw').value,
+    gender:document.getElementById('f-gender').value,
+    age:document.getElementById('f-age').value,
+    platforms:[...document.querySelectorAll('#f-plats input:checked')].map(c=>c.value),
+    cvr:n('f-cvr',2),aov:n('f-aov',0),maxKol:Math.max(1,Math.round(n('f-max',6))),
+    excludeHigh:document.getElementById('f-risk').checked
+  };
+  persist();renderRecommend();
+}
+
+/* ---------- render: recommend ---------- */
+function scoreBar(e,big){
+  const segs=['fit','er','reach','cost'].map(k=>`<span class="s-${k}" style="width:${e.parts[k].toFixed(2)}%" title="${PART_LABEL[k]} ${e.parts[k].toFixed(1)} 分"></span>`).join('');
+  const pen=e.penalty>0.05?`<span class="pen" style="left:${e.total.toFixed(2)}%;width:${e.penalty.toFixed(2)}%" title="風險扣 ${e.penalty.toFixed(1)} 分"></span>`:'';
+  return `<div class="bar${big?' big':''}" role="img" aria-label="綜合分 ${Math.round(e.total)}，${['fit','er','reach','cost'].map(k=>PART_LABEL[k]+' '+Math.round(e.parts[k])).join('、')}，風險扣 ${Math.round(e.penalty)}">${segs}${pen}</div>`;
+}
+function tagChips(e,n=5){
+  const hit=new Set(e.f.matched.map(x=>x.toLowerCase()));
+  const isHit=t=>{const l=t.toLowerCase();return [...hit].some(q=>l.includes(q)||(l.length>=2&&q.includes(l)&&l.length/q.length>=.6))};
+  const tags=(e.k.tags||[]).slice().sort((a,b)=>isHit(b)-isHit(a)).slice(0,n);
+  return tags.map(t=>`<span class="tag${isHit(t)?' hit':''}">${esc(t)}</span>`).join('');
+}
+function renderRecommend(){
+  const br=state.brief,out=document.getElementById('rec-out');
+  if(!br.platforms.length){out.innerHTML=`<div class="empty"><p>至少勾選一個平台，才能開始推薦。</p></div>`;return}
+  const r=recommend(br);
+  const tot=r.picked.reduce((a,e)=>({cost:a.cost+e.k.price,imp:a.imp+e.p.imp,clicks:a.clicks+e.p.clicks,conv:a.conv+e.p.conv,rev:a.rev+e.p.revenue}),{cost:0,imp:0,clicks:0,conv:0,rev:0});
+  const roi=tot.cost>0?(tot.rev-tot.cost)/tot.cost:0;
+  let h=`<div class="summary">
+    <div><span>預計花費</span><b>NT$${fmtW(tot.cost)}</b></div>
+    <div><span>預期曝光</span><b>${fmtW(tot.imp)}</b></div>
+    <div><span>預期點擊</span><b>${fmtW(tot.clicks)}</b></div>
+    <div><span>預期轉換</span><b>${fmt(tot.conv)} 筆</b></div>
+    <div><span>預估 ROI</span><b class="${roi>=0?'roi-pos':'roi-neg'}">${tot.cost?(roi>=0?'+':'')+pct(roi,0):'—'}</b></div>
+  </div>`;
+  if(!r.picked.length){
+    h+=`<div class="empty" style="margin-top:20px"><p>目前條件下沒有適合的 KOL。可以試著提高預算、多勾幾個平台，或換用其他需求關鍵字。</p></div>`;
+    out.innerHTML=h;return;
+  }
+  h+=`<div class="reshead"><div><h2>推薦 ${r.picked.length} 位 KOL</h2><p class="hint">以「${GOALS[br.goal].label}」為目標排序，剩餘預算 NT$${fmt(r.left)}。</p></div>
+    <div class="legend"><span><i class="s-fit"></i>契合度</span><span><i class="s-er"></i>互動品質</span><span><i class="s-reach"></i>觸及效率</span><span><i class="s-cost"></i>成本效益</span><span><i class="hatch"></i>風險扣分</span></div></div>`;
+  r.picked.forEach(e=>{
+    const rs=reasons(e,br);
+    h+=`<article class="pick">
+      <div>
+        <div class="who"><strong>${esc(e.k.name)}</strong><span class="chip ${e.k.platform}">${PLAT_LABEL[e.k.platform]}</span><span class="risk ${e.m.level}">${RISK_LABEL[e.m.level]}</span></div>
+        <div class="tags" style="margin-top:4px">${tagChips(e)}</div>
+        <div class="handle hint">@${esc(e.k.handle)}　粉絲 ${fmtW(e.k.followers)}　報價 <span class="price">NT$${fmt(e.k.price)}</span></div>
+        <div class="score"><div class="total">${Math.round(e.total)}</div>${scoreBar(e,true)}</div>
+        <ul class="why">${rs.good.map(t=>`<li>${esc(t)}</li>`).join('')}${rs.bad.map(t=>`<li class="warn">${esc(t)}</li>`).join('')}</ul>
+      </div>
+      <div class="kpis">
+        <div><span>預期曝光</span><b>${fmtW(e.p.imp)}</b></div>
+        <div><span>預期點擊</span><b>${fmtW(e.p.clicks)}</b></div>
+        <div><span>預期轉換</span><b>${fmt(e.p.conv)}</b></div>
+        <div><span>預估 ROI</span><b class="${e.p.roi>=0?'roi-pos':'roi-neg'}">${(e.p.roi>=0?'+':'')+pct(e.p.roi,0)}</b></div>
+      </div>
+    </article>`;
+  });
+  if(r.riskyOut.length){
+    h+=`<p class="note">已排除 ${r.riskyOut.length} 位高風險帳號：${r.riskyOut.map(e=>esc(e.k.name)).join('、')}。到「KOL 排名」可以看原因。</p>`;
+  }
+  h+=`<div class="panel" style="margin-top:20px"><h3>把這個組合存成專案</h3><p class="hint">存下來後，到「結案回填」輸入實際成效，系統會比較預測和實際的差距。</p>
+    <div class="inline" style="margin-top:12px"><input type="text" id="camp-name" aria-label="專案名稱" value="${esc((splitTags(br.keywords)[0]||'KOL')+'｜'+GOALS[br.goal].label+'專案 '+today())}"><button class="btn primary" id="save-camp">儲存專案</button></div></div>`;
+  out.innerHTML=h;
+  document.getElementById('save-camp').onclick=()=>{
+    const name=document.getElementById('camp-name').value.trim()||('未命名專案 '+today());
+    const cid=uid();
+    r.picked.forEach(e=>state.campaigns.push({id:uid(),cid,campaign:name,date:today(),kolId:e.k.id,kolName:e.k.name,platform:e.k.platform,cost:e.k.price,aov:br.aov,base:e.p.base,pred:{imp:e.p.imp,clicks:e.p.clicks,conv:e.p.conv,revenue:e.p.revenue},actual:null}));
+    persist();renderReview();toast('已儲存專案「'+name+'」');
+  };
+}
+
+/* ---------- render: ranking ---------- */
+function renderRanking(){
+  const br=state.brief,pf=document.getElementById('r-plat').value,cf=document.getElementById('r-cat').value,sort=document.getElementById('r-sort').value;
+  const cq=cf.trim().toLowerCase();
+  let list=state.kols.filter(k=>(!pf||k.platform===pf)&&(!cq||[k.name,k.category,...(k.tags||[])].some(t=>String(t||'').toLowerCase().includes(cq)))).map(k=>evaluate(k,br));
+  const key={total:e=>-e.total,er:e=>-e.m.er/BENCH[e.k.platform].er,followers:e=>-e.k.followers,risk:e=>-e.m.risk,cpm:e=>e.m.cpm/BENCH[e.k.platform].cpm}[sort];
+  list.sort((a,b)=>key(a)-key(b));
+  const out=document.getElementById('rank-out');
+  if(!list.length){out.innerHTML=`<div class="empty"><p>沒有符合篩選條件的 KOL。</p></div>`;return}
+  out.innerHTML=list.map((e,i)=>{
+    const b=BENCH[e.k.platform];
+    return `<details><summary>
+      <span class="no">${i+1}</span>
+      <span><strong>${esc(e.k.name)}</strong> <span class="chip ${e.k.platform}">${PLAT_LABEL[e.k.platform]}</span><br><span class="tags">${tagChips(e,3)}</span> <span class="hint"><span class="risk ${e.m.level}">${RISK_LABEL[e.m.level]}</span></span></span>
+      <span class="col"><span>粉絲</span>${fmtW(e.k.followers)}</span>
+      <span class="col"><span>互動率</span>${pct(e.m.er,2)}</span>
+      <span class="barcell">${scoreBar(e)}</span>
+      <span class="tot">${Math.round(e.total)}</span>
+    </summary>
+    <div class="detail">
+      <div><h3>指標與平台基準</h3><div class="scroll"><table class="t">
+        <tr><th>指標</th><th class="n">這位</th><th class="n">${PLAT_LABEL[e.k.platform]} 基準</th></tr>
+        <tr><td>互動率</td><td class="n">${pct(e.m.er,2)}</td><td class="n">${pct(b.er,1)}</td></tr>
+        <tr><td>觀看／粉絲</td><td class="n">${pct(e.m.reach,0)}</td><td class="n">${pct(b.reach,0)}</td></tr>
+        <tr><td>每千次觀看成本</td><td class="n">NT$${fmt(e.m.cpm)}</td><td class="n">NT$${b.cpm}</td></tr>
+        <tr><td>留言／按讚</td><td class="n">${pct(e.m.cl,1)}</td><td class="n">—</td></tr>
+        <tr><td>近 30 天發文</td><td class="n">${fmt(e.k.posts_30d)} 篇</td><td class="n">—</td></tr>
+        <tr><td>近 30 天粉絲成長</td><td class="n">${e.k.growth_30d}%</td><td class="n">—</td></tr>
+      </table></div></div>
+      <div><h3>分數組成</h3><div class="scroll"><table class="t">
+        <tr><th>面向</th><th class="n">原始分</th><th class="n">權重</th><th class="n">得分</th></tr>
+        ${['fit','er','reach','cost'].map(k=>`<tr><td>${PART_LABEL[k]}</td><td class="n">${Math.round(e.s[k])}</td><td class="n">${Math.round(e.w[k]*100)}%</td><td class="n">${e.parts[k].toFixed(1)}</td></tr>`).join('')}
+        <tr><td>風險扣分</td><td class="n">${e.m.risk}</td><td class="n">50%</td><td class="n">−${e.penalty.toFixed(1)}</td></tr>
+        <tr><td><strong>綜合分</strong></td><td></td><td></td><td class="n"><strong>${e.total.toFixed(1)}</strong></td></tr>
+      </table></div></div>
+      <div><h3>風險檢查</h3>${e.m.flags.length?`<ul class="why">${e.m.flags.map(f=>`<li class="warn">${esc(f.t)}（+${f.p}）</li>`).join('')}</ul>`:`<p class="hint">沒有發現異常。</p>`}
+        <h3 style="margin-top:16px">單篇預期成效</h3>
+        <p class="hint">曝光 ${fmtW(e.p.imp)}，點擊 ${fmtW(e.p.clicks)}，轉換 ${fmt(e.p.conv)} 筆，報價 NT$${fmt(e.k.price)}，預估 ROI ${(e.p.roi>=0?'+':'')+pct(e.p.roi,0)}。</p>
+        <h3 style="margin-top:16px">內容標籤</h3><div class="tags">${tagChips(e,20)}</div>
+        <p class="hint" style="margin-top:8px">資料來源：${esc(e.k.source||'—')}</p>
+        <button class="btn small danger" style="margin-top:10px" data-delkol="${esc(e.k.id)}">刪除這位 KOL</button></div>
+    </div></details>`;
+  }).join('');
+  out.querySelectorAll('[data-delkol]').forEach(b=>b.onclick=()=>removeKol(b.dataset.delkol));
+}
+function removeKol(id){
+  const k=state.kols.find(x=>x.id===id);if(!k)return;
+  state.kols=state.kols.filter(x=>x.id!==id);
+  state.removed=state.removed.filter(r=>r.key!==kolKey(k));
+  state.removed.push({key:kolKey(k),kol:k,date:today()});
+  persist();renderAll();toast('已刪除 '+k.name+'，可以到「資料與模型」頁還原');
+}
+
+/* ---------- render: review ---------- */
+function errBadge(pred,act){
+  if(!(pred>0)||!isFinite(act))return '';
+  const e=(act-pred)/pred,a=Math.abs(e);
+  return `<span class="err ${a<=.2?'g':a<=.5?'w':'b'}">${e>=0?'+':'−'}${Math.round(a*100)}%</span>`;
+}
+function calibTargets(){
+  const t={};
+  PLATFORMS.forEach(p=>{
+    const rs=state.campaigns.filter(c=>c.platform===p&&c.actual);
+    const gm=a=>{const v=a.filter(x=>isFinite(x)&&x>0);return v.length?Math.exp(v.reduce((s,x)=>s+Math.log(x),0)/v.length):null};
+    const views=gm(rs.map(c=>c.actual.imp/c.base.imp));
+    const ctr=gm(rs.map(c=>c.actual.imp>0?(c.actual.clicks/c.actual.imp)/c.base.ctr:NaN));
+    const cvr=gm(rs.map(c=>c.actual.clicks>0?(c.actual.conv/c.actual.clicks)/c.base.cvr:NaN));
+    t[p]={n:rs.length,views,ctr,cvr};
+  });
+  return t;
+}
+function blended(old,target){return target?+(Math.sqrt(old*target)).toFixed(3):old}
+function renderReview(){
+  const out=document.getElementById('review-out');
+  if(!state.campaigns.length){
+    out.innerHTML=`<h2>結案回填</h2><div class="empty" style="margin-top:16px"><p>還沒有任何專案。先到「推薦組合」把一組 KOL 存成專案，或載入範例資料看看這頁怎麼運作。</p>
+      <div class="inline" style="justify-content:center"><a class="btn primary" href="#recommend">去推薦組合</a><button class="btn" id="load-demo">載入範例結案資料</button></div></div>`;
+    document.getElementById('load-demo').onclick=loadDemoCampaigns;return;
+  }
+  const filled=state.campaigns.filter(c=>c.actual);
+  const mape=key=>{const v=filled.filter(c=>c.pred[key]>0).map(c=>Math.abs(c.actual[key]-c.pred[key])/c.pred[key]);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null};
+  const groups={};state.campaigns.forEach(c=>{(groups[c.cid]=groups[c.cid]||{name:c.campaign,date:c.date,rows:[]}).rows.push(c)});
+  let left='';
+  Object.entries(groups).forEach(([cid,g])=>{
+    const done=g.rows.filter(c=>c.actual).length;
+    left+=`<div class="camp"><header><div><strong>${esc(g.name)}</strong> <span class="hint">${esc(g.date)}　${done}/${g.rows.length} 位已回填</span></div><button class="btn small danger" data-delcamp="${cid}">刪除專案</button></header>`;
+    g.rows.forEach(c=>{
+      const a=c.actual;
+      left+=`<div class="rec-row"><div class="who"><strong>${esc(c.kolName)}</strong><span class="chip ${c.platform}">${PLAT_LABEL[c.platform]}</span><span class="pill ${a?'done':''}">${a?'已回填':'待回填'}</span><span class="hint">花費 NT$${fmt(c.cost)}</span></div>
+        <div class="rec-grid">
+          <div><div class="k">曝光（預測 → 實際）</div><b>${fmtW(c.pred.imp)}</b>${a?` → <b>${fmtW(a.imp)}</b>${errBadge(c.pred.imp,a.imp)}`:''}</div>
+          <div><div class="k">點擊</div><b>${fmtW(c.pred.clicks)}</b>${a?` → <b>${fmtW(a.clicks)}</b>${errBadge(c.pred.clicks,a.clicks)}`:''}</div>
+          <div><div class="k">轉換</div><b>${fmt(c.pred.conv)}</b>${a?` → <b>${fmt(a.conv)}</b>${errBadge(c.pred.conv,a.conv)}`:''}</div>
+        </div>
+        ${a?`<div class="inline" style="margin-top:8px"><span class="hint">實際 ROI ${a.revenue>=0&&c.cost?((a.revenue-c.cost)/c.cost>=0?'+':'')+pct((a.revenue-c.cost)/c.cost,0):'—'}</span><button class="btn small" data-edit="${c.id}">修改</button></div>`:fillForm2(c)}
+      </div>`;
+    });
+    left+=`</div>`;
+  });
+  const t=calibTargets();
+  let right=`<div class="panel"><h3>預測誤差</h3>`;
+  if(filled.length){
+    const fmtM=v=>v==null?'—':Math.round(v*100)+'%';
+    right+=`<p class="hint">已回填 ${filled.length} 筆。平均絕對誤差（越低越準）：</p>
+      <div class="rec-grid" style="grid-template-columns:repeat(3,1fr)"><div><div class="k">曝光</div><div class="big-num">${fmtM(mape('imp'))}</div></div><div><div class="k">點擊</div><div class="big-num">${fmtM(mape('clicks'))}</div></div><div><div class="k">轉換</div><div class="big-num">${fmtM(mape('conv'))}</div></div></div>
+      <div class="cmp"><p class="hint" style="margin:14px 0 8px"><span style="color:var(--c-cost)">■</span> 預測曝光　<span style="color:var(--accent)">■</span> 實際曝光</p>`;
+    const mx=Math.max(...filled.map(c=>Math.max(c.pred.imp,c.actual.imp)));
+    filled.forEach(c=>{right+=`<div class="r"><span>${esc(c.kolName)}</span><div class="bars"><div class="pb" style="width:${(c.pred.imp/mx*100).toFixed(1)}%"></div><div class="ab" style="width:${(c.actual.imp/mx*100).toFixed(1)}%"></div></div></div>`});
+    right+=`</div>`;
+  }else right+=`<p class="hint">回填至少一筆實際成效後，這裡會顯示預測準不準。</p>`;
+  right+=`</div><div class="panel" style="margin-top:16px"><h3>校正模型</h3><p class="hint">用已回填的資料調整各平台的預測係數。每次只往實際結果修正一半，避免被單一案例帶偏。</p>
+    <div class="scroll"><table class="t" style="margin-top:10px"><tr><th>平台</th><th class="n">筆數</th><th class="n">曝光係數</th><th class="n">點擊率係數</th><th class="n">轉換率係數</th></tr>`;
+  let any=false;
+  PLATFORMS.forEach(p=>{
+    const c=state.calib[p],x=t[p];
+    const cell=(k)=>{const nv=blended(c[k],x[k]);if(x[k]&&nv!==c[k]){any=true;return `${c[k].toFixed(2)} → <strong>${nv.toFixed(2)}</strong>`}return c[k].toFixed(2)};
+    right+=`<tr><td>${PLAT_LABEL[p]}</td><td class="n">${x.n}</td><td class="n">${cell('views')}</td><td class="n">${cell('ctr')}</td><td class="n">${cell('cvr')}</td></tr>`;
+  });
+  right+=`</table></div><button class="btn primary" id="do-calib" style="margin-top:12px" ${any?'':'disabled'}>套用校正</button>
+    <p class="note">目前模型版本 v${state.calibHistory.length}。係數大於 1 代表原本低估，小於 1 代表高估。</p></div>`;
+  out.innerHTML=`<h2>結案回填</h2><p class="hint" style="margin-bottom:16px">輸入每位 KOL 的實際成效，比較預測與實際，再用結果校正模型。</p><div class="cols"><div>${left}</div><div>${right}</div></div>`;
+  out.querySelectorAll('[data-delcamp]').forEach(b=>b.onclick=()=>{if(confirm('確定刪除這個專案和它的回填資料？')){state.campaigns=state.campaigns.filter(c=>c.cid!==b.dataset.delcamp);persist();renderReview()}});
+  out.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const c=state.campaigns.find(x=>x.id===b.dataset.edit);c._editing=true;c._prev=c.actual;c.actual=null;renderReview()});
+  out.querySelectorAll('form.fill').forEach(f=>f.onsubmit=ev=>{
+    ev.preventDefault();
+    const c=state.campaigns.find(x=>x.id===f.dataset.id);
+    const v=n=>{const x=parseFloat(f.elements[n].value);return isFinite(x)&&x>=0?x:NaN};
+    const a={imp:v('imp'),clicks:v('clicks'),conv:v('conv'),revenue:v('revenue')};
+    if(!(a.imp>0)||isNaN(a.clicks)||isNaN(a.conv)){toast('曝光要大於 0，點擊和轉換要填數字');return}
+    if(isNaN(a.revenue))a.revenue=a.conv*(c.aov||0);
+    c.actual=a;delete c._editing;delete c._prev;persist();renderReview();toast('已儲存 '+c.kolName+' 的實際成效');
+  });
+  out.querySelectorAll('[data-cancel]').forEach(b=>b.onclick=()=>{const c=state.campaigns.find(x=>x.id===b.dataset.cancel);c.actual=c._prev;delete c._editing;delete c._prev;renderReview()});
+  const dc=document.getElementById('do-calib');
+  if(dc)dc.onclick=()=>{
+    const nc={};PLATFORMS.forEach(p=>{const c=state.calib[p],x=t[p];nc[p]={views:blended(c.views,x.views),ctr:blended(c.ctr,x.ctr),cvr:blended(c.cvr,x.cvr)}});
+    state.calib=nc;state.calibHistory.push({v:state.calibHistory.length+1,date:today(),note:`依 ${filled.length} 筆結案資料校正`,calib:JSON.parse(JSON.stringify(nc))});
+    persist();renderAll();toast('模型已更新到 v'+state.calibHistory.length);
+  };
+}
+function fillForm2(c){
+  const p=c._prev||{};
+  return `<form class="fill" data-id="${c.id}">
+    <div><label>實際曝光<input name="imp" type="number" min="0" inputmode="numeric" value="${p.imp??''}"></label></div>
+    <div><label>實際點擊<input name="clicks" type="number" min="0" inputmode="numeric" value="${p.clicks??''}"></label></div>
+    <div><label>實際轉換<input name="conv" type="number" min="0" inputmode="numeric" value="${p.conv??''}"></label></div>
+    <div><label>營收（可留空）<input name="revenue" type="number" min="0" inputmode="numeric" value="${p.revenue??''}"></label></div>
+    <div class="inline"><button class="btn primary small" type="submit">儲存</button>${c._editing?`<button class="btn small" type="button" data-cancel="${c.id}">取消</button>`:''}</div>
+  </form>`;
+}
+function loadDemoCampaigns(){
+  const br={...DEFAULT_BRIEF},cid=uid();
+  const demo=[['s18',.72,1.3,1.1],['s1',1.15,.9,1.2],['s13',.95,1.4,.8],['s27',1.05,.7,.9],['s3',null]];
+  demo.forEach(([id,fv,fc,fr])=>{
+    const k=state.kols.find(x=>x.id===id);if(!k)return;
+    const e=evaluate(k,br);
+    const rec={id:uid(),cid,campaign:'範例｜美妝新品上市 '+today(),date:today(),kolId:k.id,kolName:k.name,platform:k.platform,cost:k.price,aov:br.aov,base:e.p.base,pred:{imp:e.p.imp,clicks:e.p.clicks,conv:e.p.conv,revenue:e.p.revenue},actual:null};
+    if(fv){const imp=Math.round(e.p.imp*fv),clicks=Math.round(e.p.clicks*fv*fc),conv=Math.round(e.p.conv*fv*fc*fr);rec.actual={imp,clicks,conv,revenue:conv*br.aov}}
+    state.campaigns.push(rec);
+  });
+  persist();renderReview();toast('已載入範例結案資料');
+}
+
+/* ---------- render: data ---------- */
+function renderData(){
+  const counts={};state.kols.forEach(k=>{counts[k.platform]=(counts[k.platform]||0)+1});
+  const srcs={};state.kols.forEach(k=>{srcs[k.source||'—']=(srcs[k.source||'—']||0)+1});
+  const out=document.getElementById('data-out');
+  out.innerHTML=`<h2>資料與模型</h2><p class="hint" style="margin-bottom:16px">目前共 ${state.kols.length} 位 KOL：${PLATFORMS.map(p=>`${PLAT_LABEL[p]} ${counts[p]||0} 位`).join('、')}。來源：${Object.entries(srcs).map(([s,n])=>esc(s)+' '+n+' 位').join('、')}。</p>
+  <div class="grid2">
+    <div class="panel"><h3>匯入 KOL 資料</h3>
+      <p class="hint">上傳 CSV，或直接貼上內容。可以用 Python 抓取程式產生的 <code>kol_data.csv</code>，TikTok 等抓不到的平台也可以手動填好再匯入。</p>
+      <div class="field"><input type="file" id="csv-file" accept=".csv,text/csv"></div>
+      <textarea id="csv-text" aria-label="貼上 CSV" placeholder="name,handle,platform,category,tags,followers,avg_views,…"></textarea>
+      <div class="inline" style="margin-top:10px">
+        <label class="inline" style="font-size:14px"><input type="radio" name="mode" value="merge" checked>合併（同平台同帳號會更新）</label>
+        <label class="inline" style="font-size:14px"><input type="radio" name="mode" value="replace">全部取代</label>
+      </div>
+      <div class="inline" style="margin-top:10px"><button class="btn primary" id="do-import">匯入</button><button class="btn" id="dl-template">下載範本</button></div>
+      <div class="msg" id="import-msg" role="status"></div>
+    </div>
+    <div class="panel"><h3>欄位說明</h3><div class="scroll"><table class="t">
+      <tr><th>欄位</th><th>內容</th></tr>
+      <tr><td><code>name</code></td><td>顯示名稱（必填）</td></tr>
+      <tr><td><code>handle</code></td><td>帳號，不含 @</td></tr>
+      <tr><td><code>platform</code></td><td>IG、YouTube、TikTok、X（必填）</td></tr>
+      <tr><td><code>category</code></td><td>分類名稱，可自訂，例如運動保健</td></tr>
+      <tr><td><code>tags</code></td><td>內容標籤，用分號分隔，例如 <code>物理治療;復健;肩頸</code>。沒填會用 category 代替</td></tr>
+      <tr><td><code>followers</code></td><td>粉絲或訂閱數（必填）</td></tr>
+      <tr><td><code>avg_views</code></td><td>近期每篇平均觀看（必填）</td></tr>
+      <tr><td><code>avg_likes</code>／<code>avg_comments</code></td><td>近期每篇平均按讚、留言（必填）</td></tr>
+      <tr><td><code>posts_30d</code></td><td>近 30 天發文數</td></tr>
+      <tr><td><code>growth_30d</code></td><td>近 30 天粉絲成長率（%）</td></tr>
+      <tr><td><code>price</code></td><td>每篇合作報價（新台幣，必填）</td></tr>
+      <tr><td><code>female_pct</code></td><td>受眾女性比例（%），API 拿不到時填估計值</td></tr>
+      <tr><td><code>main_age</code></td><td>主要受眾年齡：${AGES.join('、')}</td></tr>
+      <tr><td><code>source</code></td><td>資料來源備註</td></tr>
+    </table></div></div>
+    <div class="panel"><h3>匯出與重設</h3>
+      <div class="inline"><button class="btn" id="dl-page">下載這個網頁</button><button class="btn" id="dl-kols">匯出 KOL 資料（CSV）</button><button class="btn" id="dl-camps" ${state.campaigns.length?'':'disabled'}>匯出結案紀錄（CSV）</button></div>
+      <textarea id="export-fallback" hidden aria-label="匯出內容" readonly></textarea>
+      <div class="inline" style="margin-top:14px"><button class="btn danger" id="reset-kols">還原範例 KOL</button><button class="btn danger" id="reset-model">重設模型與結案紀錄</button></div>
+    </div>
+    <div class="panel"><h3>平台基準（評分依據）</h3><div class="scroll"><table class="t">
+      <tr><th>平台</th><th class="n">互動率</th><th class="n">觀看／粉絲</th><th class="n">每千次觀看</th><th class="n">點擊率</th></tr>
+      ${PLATFORMS.map(p=>`<tr><td>${PLAT_LABEL[p]}</td><td class="n">${pct(BENCH[p].er,1)}</td><td class="n">${pct(BENCH[p].reach,0)}</td><td class="n">NT$${BENCH[p].cpm}</td><td class="n">${pct(BENCH[p].ctr,1)}</td></tr>`).join('')}
+    </table></div><p class="note">各面向原始分以「達到平台基準 = 50 分」換算，上限 100。這些基準是原型用的假設值，正式版應該用業界報告或歷史資料替換。</p></div>
+    <div class="panel"><h3>各目標的權重</h3><div class="scroll"><table class="t">
+      <tr><th>目標</th>${['fit','er','reach','cost'].map(k=>`<th class="n">${PART_LABEL[k]}</th>`).join('')}</tr>
+      ${Object.values(GOALS).map(g=>`<tr><td>${g.label}</td>${['fit','er','reach','cost'].map(k=>`<td class="n">${Math.round(g.w[k]*100)}%</td>`).join('')}</tr>`).join('')}
+    </table></div><p class="note">綜合分 = 各面向分數 × 權重的總和，再扣掉風險分數的一半。</p></div>
+    <div class="panel"><h3>已刪除的 KOL</h3><p class="hint">之後匯入 CSV 時會自動略過這些人。</p>
+      ${state.removed.length?`<div class="scroll"><table class="t" style="margin-top:8px"><tr><th>名稱</th><th>平台</th><th>刪除日期</th><th></th></tr>${state.removed.slice().reverse().map(r=>`<tr><td>${esc(r.kol.name)}</td><td>${PLAT_LABEL[r.kol.platform]||esc(r.kol.platform)}</td><td>${esc(r.date)}</td><td><button class="btn small" data-restore="${esc(r.key)}">還原</button></td></tr>`).join('')}</table></div>`:`<p class="hint" style="margin-top:8px">目前沒有。在「KOL 排名」頁點開任一位，可以刪除不相關的 KOL。</p>`}
+    </div>
+    <div class="panel"><h3>模型版本紀錄</h3><div class="scroll"><table class="t">
+      <tr><th>版本</th><th>日期</th><th>說明</th></tr>
+      ${state.calibHistory.slice().reverse().map(h=>`<tr><td>v${h.v}</td><td>${esc(h.date)}</td><td>${esc(h.note)}</td></tr>`).join('')}
+    </table></div></div>
+  </div>`;
+  document.getElementById('csv-file').onchange=ev=>{const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{document.getElementById('csv-text').value=r.result};r.readAsText(f,'utf-8')};
+  document.getElementById('do-import').onclick=doImport;
+  document.getElementById('dl-page').onclick=()=>offerFile('kol-decision.html',PRISTINE_HTML);
+  out.querySelectorAll('[data-restore]').forEach(b=>b.onclick=()=>{
+    const r=state.removed.find(x=>x.key===b.dataset.restore);if(!r)return;
+    state.removed=state.removed.filter(x=>x!==r);
+    if(!state.kols.some(x=>kolKey(x)===r.key))state.kols.push(r.kol);
+    persist();renderAll();toast('已還原 '+r.kol.name);
+  });
+  document.getElementById('dl-template').onclick=()=>offerFile('kol_template.csv',toCSV(SAMPLE_KOLS.slice(0,3).map(k=>({...k,source:'手動填寫'}))));
+  document.getElementById('dl-kols').onclick=()=>offerFile('kol_data_export.csv',toCSV(state.kols));
+  document.getElementById('dl-camps').onclick=()=>{
+    const head=['campaign','date','kol','platform','cost','pred_imp','pred_clicks','pred_conv','actual_imp','actual_clicks','actual_conv','actual_revenue'];
+    const rows=state.campaigns.map(c=>[c.campaign,c.date,c.kolName,c.platform,c.cost,Math.round(c.pred.imp),Math.round(c.pred.clicks),Math.round(c.pred.conv),c.actual?.imp??'',c.actual?.clicks??'',c.actual?.conv??'',c.actual?.revenue??'']);
+    offerFile('campaign_results.csv',[head,...rows].map(r=>r.map(csvCell).join(',')).join('\n'));
+  };
+  document.getElementById('reset-kols').onclick=()=>{if(confirm('把 KOL 資料換回範例資料？匯入的資料會被清除。')){state.kols=SAMPLE_KOLS.map(k=>({...k}));persist();renderAll();toast('已還原範例 KOL')}};
+  document.getElementById('reset-model').onclick=()=>{if(confirm('清除所有結案紀錄，並把模型係數重設為 1？')){state.campaigns=[];state.calib=freshCalib();state.calibHistory=[{v:1,date:today(),note:'初始模型（未校正）',calib:freshCalib()}];persist();renderAll();toast('已重設模型')}};
+}
+function csvCell(v){const s=String(v??'');return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
+function toCSV(kols){return [FIELDS.join(','),...kols.map(k=>FIELDS.map(f=>csvCell(f==='tags'?(k.tags||[]).join(';'):k[f])).join(','))].join('\n')}
+function parseCSV(text){
+  const rows=[];let row=[],f='',q=false;
+  text=text.replace(/^\uFEFF/,'');
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(q){if(ch==='"'){if(text[i+1]==='"'){f+='"';i++}else q=false}else f+=ch}
+    else if(ch==='"')q=true;
+    else if(ch===','){row.push(f);f=''}
+    else if(ch==='\n'||ch==='\r'){if(ch==='\r'&&text[i+1]==='\n')i++;row.push(f);rows.push(row);row=[];f=''}
+    else f+=ch;
+  }
+  if(f!==''||row.length){row.push(f);rows.push(row)}
+  return rows.filter(r=>r.some(c=>c.trim()!==''));
+}
+function normPlat(s){s=String(s||'').trim().toLowerCase();if(['ig','instagram'].includes(s))return 'IG';if(['yt','youtube'].includes(s))return 'YouTube';if(['tiktok','tt','抖音'].includes(s))return 'TikTok';if(['x','twitter'].includes(s))return 'X';return null}
+function doImport(){
+  const msg=document.getElementById('import-msg');msg.className='msg';
+  const rows=parseCSV(document.getElementById('csv-text').value||'');
+  if(rows.length<2){msg.className='msg bad';msg.textContent='沒有讀到資料。第一列要是欄位名稱，從第二列開始放 KOL。';return}
+  const head=rows[0].map(h=>h.trim().toLowerCase());
+  const need=['name','platform','followers','avg_views','avg_likes','avg_comments','price'];
+  const miss=need.filter(n=>!head.includes(n));
+  if(miss.length){msg.className='msg bad';msg.textContent='缺少必填欄位：'+miss.join('、');return}
+  const ok=[],bad=[];
+  rows.slice(1).forEach((r,i)=>{
+    const o={};head.forEach((h,j)=>o[h]=(r[j]??'').trim());
+    const num=(k,d)=>{const v=parseFloat(String(o[k]??'').replace(/,/g,''));return isFinite(v)?v:d};
+    const plat=normPlat(o.platform);
+    const k={id:'i'+uid(),name:o.name,handle:(o.handle||'').replace(/^@/,''),platform:plat,category:o.category||'',tags:splitTags(o.tags).length?splitTags(o.tags):(o.category?(CAT_TAGS[o.category]||[o.category]):[]),
+      followers:num('followers',NaN),avg_views:num('avg_views',NaN),avg_likes:num('avg_likes',NaN),avg_comments:num('avg_comments',NaN),
+      posts_30d:num('posts_30d',4),growth_30d:num('growth_30d',0),price:num('price',NaN),female_pct:clamp(num('female_pct',50)),
+      main_age:AGES.includes(o.main_age)?o.main_age:'25-34',source:o.source||'CSV 匯入'};
+    const why=[];if(!k.name)why.push('沒有名稱');if(!plat)why.push('平台無法辨識');
+    ['followers','avg_views','avg_likes','avg_comments','price'].forEach(f=>{if(!isFinite(k[f]))why.push(f+' 不是數字')});
+    if(why.length)bad.push(`第 ${i+2} 列：${why.join('、')}`);else ok.push(k);
+  });
+  const rmKeys=new Set(state.removed.map(r=>r.key));let skippedRm=0;
+  for(let i=ok.length-1;i>=0;i--)if(rmKeys.has(kolKey(ok[i]))){ok.splice(i,1);skippedRm++}
+  if(!ok.length&&skippedRm){msg.className='msg bad';msg.textContent=`檔案裡的 ${skippedRm} 位都是已刪除的 KOL，所以沒有匯入。`;return}
+  if(!ok.length){msg.className='msg bad';msg.textContent='沒有可匯入的資料。'+bad.slice(0,3).join('；');return}
+  const mode=(document.querySelector('input[name=mode]:checked')||{}).value;
+  let updated=0;
+  if(mode==='replace')state.kols=ok;
+  else ok.forEach(k=>{const key=x=>x.platform+'|'+(x.handle||x.name).toLowerCase();const i=state.kols.findIndex(x=>key(x)===key(k));if(i>=0){k.id=state.kols[i].id;state.kols[i]=k;updated++}else state.kols.push(k)});
+  const noTag=ok.filter(k=>!k.tags.length).length;
+  persist();renderAll();
+  const m=document.getElementById('import-msg');
+  m.className='msg '+(bad.length?'bad':'ok');
+  m.textContent=`匯入 ${ok.length} 位（其中更新 ${updated} 位）。`+(bad.length?`略過 ${bad.length} 列：${bad.slice(0,3).join('；')}`:'')+(noTag?`有 ${noTag} 位沒有標籤，只有在不輸入需求關鍵字時才會被推薦。`:'')+(skippedRm?`略過 ${skippedRm} 位已刪除的 KOL。`:'');
+}
+async function offerFile(name,content){
+  const data='\uFEFF'+content;
+  try{
+    const dl=window.claude&&window.claude.use?await window.claude.use('downloads'):null;
+    if(dl){await dl.save({filename:name,data});toast('已下載 '+name);return}
+  }catch(e){if(e&&e.code==='declined')return}
+  const ta=document.getElementById('export-fallback');
+  if(ta){ta.hidden=false;ta.value=content;ta.focus();ta.select();toast('這裡無法直接下載，請複製文字框內容存成 '+name)}
+}
+
+/* ---------- routing ---------- */
+
+/* ---------- YouTube 即時搜尋 ---------- */
+let YT_KEY='';
+const YT_BASE='https://www.googleapis.com/youtube/v3/';
+const NOT_KOL=/官方|official|音樂|music|records|唱片|娛樂|entertainment|新聞|news|電視台|政府|部$|署|局$|協會|基金會|公司|集團|大學|醫院|vevo| - topic$/i;
+const PROMO_TAG=/留言|訂閱|蝦皮|商城|連結|合作|贊助|優惠|折扣|團購|抽獎|頻道|官網|line|ig|fb/i;
+const SIMPLIFIED=new Set('们这个说为东国时会来对发经过见长门问间关头实现点学书车马鸟龙电视听让给还没认气热习无边应该样产业专营养饮药医疗护体动运练节脑颈壳杨级际软件画视频');
+const STOP_TAGS=new Set(['vlog','youtube','youtuber','shorts','short','台灣','taiwan','tw','影片','video','推薦','分享','教學','日常','生活','記錄','开箱','開箱','hd','4k','直播','live','ep','免費']);
+const TOPIC_ZH={Health:'健康',Physical_fitness:'健身',Sport:'運動',Food:'美食',Tourism:'旅遊',Technology:'科技',Fashion:'時尚',Physical_attractiveness:'美妝','Lifestyle_(sociology)':'生活風格',Video_game_culture:'遊戲',Hobby:'嗜好',Pet:'寵物',Vehicle:'汽車',Knowledge:'知識'};
+let ytResults=[];
+const hasCJK=t=>/[一-鿿]/.test(t||'');
+function isSimplified(t){const c=(t||'').match(/[一-鿿]/g)||[];const h=c.filter(x=>SIMPLIFIED.has(x)).length;return h>=3&&h/Math.max(1,c.length)>.03}
+const estimatePrice=subs=>Math.round((8000+subs*.25)/1000)*1000;
+const vText=v=>(v.title+' '+v.tags.join(' ')+' '+v.desc).toLowerCase();
+async function ytGet(path,params){
+  const u=new URL(YT_BASE+path);
+  Object.entries({...params,key:YT_KEY}).forEach(([k,v])=>u.searchParams.set(k,v));
+  let r;
+  try{r=await fetch(u.toString())}catch(e){const err=new Error('network');err.network=true;throw err}
+  const d=await r.json().catch(()=>({}));
+  if(d.error){const reason=(d.error.errors&&d.error.errors[0]&&d.error.errors[0].reason)||'';
+    throw new Error(reason==='quotaExceeded'?'今天的 API 額度用完了，明天再試':reason==='keyInvalid'||/API key not valid/.test(d.error.message)?'API key 不正確':(d.error.message||'YouTube API 錯誤'))}
+  return d;
+}
+function ytNetworkMsg(){return '這個頁面無法連到 YouTube（可能被所在平台的安全設定擋住）。可以到「資料與模型」頁按「下載這個網頁」，在自己電腦用瀏覽器打開就能使用這個功能；或繼續用 Python 程式匯入 CSV。'}
+function extractTags(videos,keywords,chTitle,topics){
+  const counts={},kw=keywords.map(k=>k.toLowerCase()),ct=chTitle.toLowerCase();
+  videos.forEach(v=>{
+    const ws=new Set(v.tags.map(t=>t.trim().replace(/^#/,'')));
+    ((v.title+' '+v.desc).match(/#([^\s#]{2,12})/g)||[]).forEach(h=>ws.add(h.slice(1)));
+    ws.forEach(w=>{const l=w.toLowerCase();
+      if(w.length<2||w.length>12||STOP_TAGS.has(l)||PROMO_TAG.test(w)||isSimplified(w)||l.includes(ct)||(ct.includes(l)&&!kw.includes(l)))return;
+      counts[w]=(counts[w]||0)+1});
+  });
+  const common=Object.entries(counts).filter(x=>x[1]>=2).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+  const matched=keywords.filter(k=>videos.some(v=>vText(v).includes(k.toLowerCase())));
+  const out=[];
+  [...matched,...common,...topics.map(t=>TOPIC_ZH[t]).filter(Boolean)].forEach(t=>{if(!out.some(x=>x.toLowerCase()===t.toLowerCase()))out.push(t)});
+  return out.slice(0,8);
+}
+function setProg(text,frac){
+  document.getElementById('yt-prog').innerHTML=esc(text)+(frac!=null?`<div class="bar"><span style="width:${(frac*100).toFixed(0)}%"></span></div>`:'');
+}
+async function ytSearch(){
+  YT_KEY=document.getElementById('yt-key').value.trim();
+  const out=document.getElementById('yt-out');
+  if(!YT_KEY){toast('請先輸入 API key');return}
+  const q=document.getElementById('yt-q').value.trim();
+  if(!q){toast('請輸入搜尋關鍵字');return}
+  const words=splitTags(document.getElementById('yt-words').value).length?splitTags(document.getElementById('yt-words').value):splitTags(q);
+  const negs=splitTags(document.getElementById('yt-negs').value);
+  const label=document.getElementById('yt-label').value.trim()||words[0]||q;
+  const female=clamp(parseFloat(document.getElementById('yt-female').value)||50);
+  const age=document.getElementById('yt-age').value;
+  const want=Math.max(1,Math.min(30,parseInt(document.getElementById('yt-want').value)||15));
+  const minSubs=Math.max(0,parseInt(document.getElementById('yt-min').value)||0);
+  const negHit=t=>negs.some(n=>t.toLowerCase().includes(n.toLowerCase()));
+  const musicOk=words.some(w=>w.includes('音樂')||/music/i.test(w));
+  const btn=document.getElementById('yt-go');btn.disabled=true;out.innerHTML='';
+  const excluded=[];
+  try{
+    setProg(`搜尋「${q}」相關影片中…`,.05);
+    const hits={};let token=null;
+    for(let i=0;i<2;i++){
+      const p={part:'snippet',q,type:'video',regionCode:'TW',relevanceLanguage:'zh-Hant',maxResults:50};
+      if(token)p.pageToken=token;
+      const r=await ytGet('search',p);
+      (r.items||[]).forEach(it=>{const c=it.snippet.channelId;hits[c]=(hits[c]||0)+1});
+      token=r.nextPageToken;if(!token)break;
+    }
+    const ids=Object.keys(hits);
+    if(!ids.length){setProg('找不到相關影片，換個關鍵字試試。');return}
+    setProg('讀取頻道資料中…',.15);
+    const chans=[];
+    for(let i=0;i<ids.length;i+=50){const r=await ytGet('channels',{part:'snippet,statistics,contentDetails,topicDetails,status',id:ids.slice(i,i+50).join(',')});chans.push(...(r.items||[]))}
+    const pre=[];
+    chans.forEach(ch=>{
+      const st=ch.statistics||{},sn=ch.snippet||{},title=sn.title||'',desc=sn.description||'';
+      if(st.hiddenSubscriberCount)return;
+      const subs=+st.subscriberCount||0;if(subs<minSubs)return;
+      if(sn.country&&sn.country!=='TW')return excluded.push([title,'頻道地區不是台灣']);
+      if(!hasCJK(title+desc))return excluded.push([title,'不是中文頻道']);
+      if(isSimplified(title+desc))return excluded.push([title,'以簡體中文為主']);
+      if(ch.status&&ch.status.madeForKids)return excluded.push([title,'兒童頻道']);
+      if(negs.length&&negHit(title+' '+desc))return excluded.push([title,'頻道名稱或簡介含排除詞']);
+      if(NOT_KOL.test(title))return excluded.push([title,'官方／媒體／機構帳號']);
+      const topics=((ch.topicDetails||{}).topicCategories||[]).map(u=>u.split('/').pop());
+      if(!musicOk&&topics.length&&topics.every(t=>/music/i.test(t)))return excluded.push([title,'音樂頻道']);
+      pre.push({ch,subs,hits:hits[ch.id],topics,chMatch:words.some(w=>(title+desc).toLowerCase().includes(w.toLowerCase()))});
+    });
+    pre.sort((a,b)=>(b.hits-a.hits)||(b.chMatch-a.chMatch)||(b.subs-a.subs));
+    const check=pre.slice(0,Math.max(want*2,20));
+    const scored=[];
+    for(let i=0;i<check.length;i++){
+      const c=check[i],title=c.ch.snippet.title;
+      setProg(`檢查近期影片內容：${title}（${i+1}/${check.length}）`,.2+.8*i/check.length);
+      try{
+        const pl=await ytGet('playlistItems',{part:'contentDetails',playlistId:c.ch.contentDetails.relatedPlaylists.uploads,maxResults:12});
+        const items=pl.items||[];if(!items.length){excluded.push([title,'沒有近期影片']);continue}
+        const times=items.map(x=>x.contentDetails.videoPublishedAt).filter(Boolean).map(t=>new Date(t));
+        const vs=await ytGet('videos',{part:'snippet,statistics,status',id:items.map(x=>x.contentDetails.videoId).join(',')});
+        const vids=(vs.items||[]).map(v=>({title:v.snippet.title||'',tags:v.snippet.tags||[],desc:(v.snippet.description||'').slice(0,400),cat:v.snippet.categoryId,kids:!!(v.status&&v.status.madeForKids),
+          views:+v.statistics.viewCount||0,likes:v.statistics.likeCount!=null?+v.statistics.likeCount:null,comments:v.statistics.commentCount!=null?+v.statistics.commentCount:null}));
+        if(!vids.length){excluded.push([title,'沒有近期影片']);continue}
+        const frac=f=>vids.filter(f).length/vids.length;
+        if(isSimplified(vids.map(v=>v.title).join(' '))){excluded.push([title,'影片以簡體中文為主']);continue}
+        if(!musicOk&&frac(v=>v.cat==='10')>=.5){excluded.push([title,'近期影片多為音樂']);continue}
+        if(frac(v=>v.cat==='25')>=.5){excluded.push([title,'近期影片多為新聞']);continue}
+        if(frac(v=>v.kids)>=.5){excluded.push([title,'兒童頻道']);continue}
+        if(negs.length&&frac(v=>negHit(vText(v)))>=.3){excluded.push([title,'近期影片常出現排除詞']);continue}
+        const share=frac(v=>words.some(w=>vText(v).includes(w.toLowerCase()))&&!(negs.length&&negHit(vText(v))));
+        if(share<.25){excluded.push([title,'近期影片提到相關詞的比例太低']);continue}
+        const avgOf=a=>{a=a.filter(x=>x!=null);return a.length?Math.round(a.reduce((s,x)=>s+x,0)/a.length):0};
+        const now=Date.now();
+        c.data={avg_views:avgOf(vids.map(v=>v.views)),avg_likes:avgOf(vids.map(v=>v.likes)),avg_comments:avgOf(vids.map(v=>v.comments)),posts_30d:times.filter(t=>now-t<=30*864e5).length};
+        c.share=share;c.score=3*share+.5*Math.min(c.hits,3)+(c.chMatch?1:0);
+        c.tags=extractTags(vids,words,title,c.topics);
+        scored.push(c);
+      }catch(e){if(e.network)throw e;excluded.push([title,'讀取失敗']);}
+    }
+    scored.sort((a,b)=>(b.score-a.score)||(b.subs-a.subs));
+    const rmKeys=new Set(state.removed.map(r=>r.key));
+    ytResults=scored.slice(0,want).map(c=>{
+      const sn=c.ch.snippet,handle=(sn.customUrl||c.ch.id).replace(/^@/,'');
+      const k={id:'y'+uid(),name:sn.title,handle,platform:'YouTube',category:label,tags:c.tags,followers:c.subs,...c.data,growth_30d:0,
+        price:estimatePrice(c.subs),female_pct:female,main_age:age,source:`YouTube API ${today()}（報價與受眾為估計）`};
+      return {k,share:c.share,removed:rmKeys.has(kolKey(k)),exists:state.kols.some(x=>kolKey(x)===kolKey(k))};
+    });
+    setProg(`完成：找到 ${ytResults.length} 位，排除 ${excluded.length} 個頻道。`,1);
+    renderYtResults(excluded);
+  }catch(e){
+    setProg('');
+    out.innerHTML=`<div class="empty"><p>${esc(e.network?ytNetworkMsg():e.message)}</p></div>`;
+  }finally{btn.disabled=false}
+}
+function renderYtResults(excluded){
+  const out=document.getElementById('yt-out');
+  const groups={};excluded.forEach(([t,w])=>(groups[w]=groups[w]||[]).push(t));
+  const exHtml=excluded.length?`<details style="margin-top:14px"><summary class="hint" style="cursor:pointer">已排除 ${excluded.length} 個頻道（點開看原因）</summary><ul class="ex">${Object.entries(groups).sort((a,b)=>b[1].length-a[1].length).map(([w,n])=>`<li>${esc(w)}：${n.slice(0,5).map(esc).join('、')}${n.length>5?` 等 ${n.length} 個`:''}</li>`).join('')}</ul></details>`:'';
+  if(!ytResults.length){out.innerHTML=`<div class="empty"><p>沒有符合條件的頻道。可以換關鍵字、多給幾個相關詞，或降低最少訂閱數。</p></div>${exHtml}`;return}
+  out.innerHTML=`<div class="panel"><div class="inline" style="justify-content:space-between"><h3 style="margin:0">搜尋結果</h3>
+    <div class="inline"><button class="btn small" id="yt-all">全選</button><button class="btn primary" id="yt-add">加入勾選的 KOL</button></div></div>
+    <div class="scroll" style="margin-top:10px"><table class="t"><tr><th class="ck"></th><th>頻道</th><th class="n">訂閱</th><th class="n">平均觀看</th><th class="n">內容相關</th><th class="n">估計報價</th><th>標籤</th></tr>
+    ${ytResults.map((r,i)=>`<tr><td class="ck"><input type="checkbox" data-yi="${i}" ${r.removed?'':'checked'} aria-label="選取 ${esc(r.k.name)}"></td>
+      <td><strong>${esc(r.k.name)}</strong>${r.exists?' <span class="tag">已在資料中，會更新</span>':''}${r.removed?' <span class="risk mid">曾被刪除</span>':''}<br><a class="hint" href="https://www.youtube.com/@${encodeURIComponent(r.k.handle)}" target="_blank" rel="noopener">@${esc(r.k.handle)}</a></td>
+      <td class="n">${fmtW(r.k.followers)}</td><td class="n">${fmtW(r.k.avg_views)}</td><td class="n">${pct(r.share,0)}</td><td class="n">NT$${fmt(r.k.price)}</td>
+      <td><span class="tags">${r.k.tags.slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</span></td></tr>`).join('')}
+    </table></div>${exHtml}</div>`;
+  document.getElementById('yt-all').onclick=()=>out.querySelectorAll('[data-yi]').forEach(c=>c.checked=true);
+  document.getElementById('yt-add').onclick=()=>{
+    const pick=[...out.querySelectorAll('[data-yi]:checked')].map(c=>ytResults[+c.dataset.yi]);
+    if(!pick.length){toast('沒有勾選任何頻道');return}
+    let added=0,updated=0;
+    pick.forEach(r=>{
+      const key=kolKey(r.k);state.removed=state.removed.filter(x=>x.key!==key);
+      const i=state.kols.findIndex(x=>kolKey(x)===key);
+      if(i>=0){r.k.id=state.kols[i].id;state.kols[i]=r.k;updated++}else{state.kols.push(r.k);added++}
+      r.exists=true;r.removed=false;
+    });
+    persist();renderAll();renderYtResults(excluded);
+    toast(`已加入 ${added} 位、更新 ${updated} 位，到「推薦組合」就能用`);
+  };
+}
+document.getElementById('yt-go').onclick=ytSearch;
+document.getElementById('yt-test').onclick=async()=>{
+  YT_KEY=document.getElementById('yt-key').value.trim();
+  const m=document.getElementById('yt-test-msg');m.className='msg';
+  if(!YT_KEY){m.className='msg bad';m.textContent='請先輸入 API key。';return}
+  m.textContent='測試中…';
+  try{await ytGet('videoCategories',{part:'snippet',regionCode:'TW'});m.className='msg ok';m.textContent='連線成功，可以開始搜尋。'}
+  catch(e){m.className='msg bad';m.textContent=e.network?ytNetworkMsg():e.message}
+};
+
+const VIEWS=['recommend','ranking','review','youtube','data'];
+function route(){
+  const v=VIEWS.includes(location.hash.slice(1))?location.hash.slice(1):'recommend';
+  VIEWS.forEach(x=>{document.getElementById('view-'+x).hidden=x!==v});
+  document.querySelectorAll('nav.tabs a').forEach(a=>{if(a.dataset.view===v)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
+}
+function renderAll(){fillForm();renderRecommend();renderRanking();renderReview();renderData()}
+window.addEventListener('hashchange',route);
+initForm();renderAll();route();initRemote();
+</script>
+</body>
+</html>
