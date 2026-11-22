@@ -334,7 +334,13 @@ table.t td.ck,table.t th.ck{width:32px}
         <div><label for="ig-female">受眾女性比例估計（%）</label><input id="ig-female" type="number" min="0" max="100" value="50"></div>
         <div><label for="ig-age">主要受眾年齡</label><select id="ig-age"><option>18-24</option><option selected>25-34</option><option>35-44</option><option>45+</option></select></div>
       </div>
-      <div class="inline" style="margin-top:14px"><button class="btn primary" id="ig-go" disabled>抓取</button><span class="hint">一次最多 50 個帳號。只能查商業或創作者帳號。</span></div>
+      <div class="inline" style="margin-top:14px"><button class="btn primary" id="ig-go" disabled>抓取清單上的帳號</button><span class="hint">一次最多 50 個帳號。只能查商業或創作者帳號。</span></div>
+      <div class="panel" style="margin-top:14px;background:var(--sunk);border:0">
+        <h3 style="margin-bottom:4px">找更多人：從清單帳號擴散</h3>
+        <p class="hint">把清單上的帳號當「種子」，系統讀他們最近的貼文，找出被 @ 標註的其他帳號，再用相關詞判斷是不是同領域。同領域的創作者常互相標註，所以能找到只經營 IG 的人。需要填「相關詞」。</p>
+        <div class="inline" style="margin-top:10px"><label for="ig-max" class="hint">最多檢查幾個被標註的帳號</label><input id="ig-max" type="number" min="5" max="40" value="20" style="width:80px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 9px"><button class="btn" id="ig-snow" disabled>開始擴散</button></div>
+        <p class="hint" style="margin-top:6px">Instagram 每小時大約只能查 200 個帳號，種子最多取 15 個。</p>
+      </div>
       <div class="prog" id="ig-prog" aria-live="polite"></div>
     </div>
     <div id="ig-out" style="margin-top:16px"></div>
@@ -366,7 +372,7 @@ const GOALS={
   convert:{label:'轉換',w:{fit:.45,er:.25,reach:.10,cost:.20}}
 };
 const PART_LABEL={fit:'契合度',er:'互動品質',reach:'觸及效率',cost:'成本效益'};
-const FIELDS=['name','handle','platform','category','tags','followers','avg_views','avg_likes','avg_comments','posts_30d','growth_30d','price','female_pct','main_age','source'];
+const FIELDS=['name','handle','platform','category','tags','followers','avg_views','avg_likes','avg_comments','posts_30d','growth_30d','price','female_pct','main_age','source','ig'];
 
 const SAMPLE_KOLS=[
  ['小鹿的保養日記','deer.skincare','IG','美妝保養',86000,24000,2600,180,14,2.1,18000,88,'18-24'],
@@ -671,11 +677,34 @@ function renderRanking(){
         <h3 style="margin-top:16px">單篇預期成效</h3>
         <p class="hint">曝光 ${fmtW(e.p.imp)}，點擊 ${fmtW(e.p.clicks)}，轉換 ${fmt(e.p.conv)} 筆，報價 NT$${fmt(e.k.price)}，預估 ROI ${(e.p.roi>=0?'+':'')+pct(e.p.roi,0)}。</p>
         <h3 style="margin-top:16px">內容標籤</h3><div class="tags">${tagChips(e,20)}</div>
+        ${crossPlatform(e,br)}
         <p class="hint" style="margin-top:8px">資料來源：${esc(e.k.source||'—')}</p>
         <button class="btn small danger" style="margin-top:10px" data-delkol="${esc(e.k.id)}">刪除這位 KOL</button></div>
     </div></details>`;
   }).join('');
   out.querySelectorAll('[data-delkol]').forEach(b=>b.onclick=()=>removeKol(b.dataset.delkol));
+}
+function partnerOf(k){
+  if(k.platform==='YouTube'&&k.ig)return state.kols.find(x=>x.platform==='IG'&&String(x.handle).toLowerCase()===k.ig);
+  if(k.platform==='IG'){const h=String(k.handle).toLowerCase();return state.kols.find(x=>x.platform==='YouTube'&&x.ig===h)}
+  return null;
+}
+function crossPlatform(e,br){
+  const p=partnerOf(e.k);
+  if(!p)return e.k.platform==='YouTube'&&e.k.ig?`<p class="hint" style="margin-top:10px">這位也有 IG（@${esc(e.k.ig)}），到「Instagram 抓取」抓他的數據後，這裡會並排比較兩個平台。</p>`:'';
+  const a=e.k.platform==='YouTube'?e:evaluate(p,br),b=e.k.platform==='YouTube'?evaluate(p,br):e;
+  const row=(lab,fa,fb,better)=>{const w=better==null?'':better?' style="font-weight:700"':'';const w2=better==null?'':!better?' style="font-weight:700"':'';return `<tr><td>${lab}</td><td class="n"${w}>${fa}</td><td class="n"${w2}>${fb}</td></tr>`};
+  const erA=a.m.er/BENCH.YouTube.er,erB=b.m.er/BENCH.IG.er;
+  const best=a.total>=b.total?'YouTube':'Instagram';
+  return `<h3 style="margin-top:16px">跨平台比較</h3><div class="scroll"><table class="t">
+    <tr><th></th><th class="n">YouTube</th><th class="n">Instagram</th></tr>
+    ${row('粉絲／訂閱',fmtW(a.k.followers),fmtW(b.k.followers),a.k.followers>=b.k.followers)}
+    ${row('平均觀看',fmtW(a.k.avg_views),fmtW(b.k.avg_views),a.k.avg_views>=b.k.avg_views)}
+    ${row('互動率（相對平台基準）',pct(a.m.er,2)+'（'+erA.toFixed(1)+' 倍）',pct(b.m.er,2)+'（'+erB.toFixed(1)+' 倍）',erA>=erB)}
+    ${row('每千次觀看成本',isFinite(a.m.cpm)?'NT$'+fmt(a.m.cpm):'—',isFinite(b.m.cpm)?'NT$'+fmt(b.m.cpm):'—',a.m.cpm<=b.m.cpm)}
+    ${row('估計報價','NT$'+fmt(a.k.price),'NT$'+fmt(b.k.price),null)}
+    ${row('綜合分',Math.round(a.total),Math.round(b.total),a.total>=b.total)}
+  </table></div><p class="hint" style="margin-top:6px">以目前的合作條件來看，${best} 的綜合分較高。互動率用「相對平台基準幾倍」比較，因為各平台的正常水準不同。</p>`;
 }
 function removeKol(id){
   const k=state.kols.find(x=>x.id===id);if(!k)return;
@@ -900,7 +929,7 @@ function doImport(){
     const o={};head.forEach((h,j)=>o[h]=(r[j]??'').trim());
     const num=(k,d)=>{const v=parseFloat(String(o[k]??'').replace(/,/g,''));return isFinite(v)?v:d};
     const plat=normPlat(o.platform);
-    const k={id:'i'+uid(),name:o.name,handle:(o.handle||'').replace(/^@/,''),platform:plat,category:o.category||'',tags:splitTags(o.tags).length?splitTags(o.tags):(o.category?(CAT_TAGS[o.category]||[o.category]):[]),
+    const k={id:'i'+uid(),name:o.name,handle:(o.handle||'').replace(/^@/,''),platform:plat,ig:(o.ig||'').replace(/^@/,'').toLowerCase(),category:o.category||'',tags:splitTags(o.tags).length?splitTags(o.tags):(o.category?(CAT_TAGS[o.category]||[o.category]):[]),
       followers:num('followers',NaN),avg_views:num('avg_views',NaN),avg_likes:num('avg_likes',NaN),avg_comments:num('avg_comments',NaN),
       posts_30d:num('posts_30d',4),growth_30d:num('growth_30d',0),price:num('price',NaN),female_pct:clamp(num('female_pct',50)),
       main_age:AGES.includes(o.main_age)?o.main_age:'25-34',source:o.source||'CSV 匯入'};
@@ -1059,7 +1088,7 @@ async function ytSearch(){
     ytResults=scored.slice(0,want).map(c=>{
       const sn=c.ch.snippet,handle=(sn.customUrl||c.ch.id).replace(/^@/,'');
       const k={id:'y'+uid(),name:sn.title,handle,platform:'YouTube',category:label,tags:c.tags,followers:c.subs,...c.data,growth_30d:0,
-        price:estimatePrice(c.subs),female_pct:female,main_age:age,source:`YouTube API ${today()}（報價與受眾為估計）`};
+        price:estimatePrice(c.subs),female_pct:female,main_age:age,source:`YouTube API ${today()}（報價與受眾為估計）`,ig:c.ig||''};
       return {k,ig:c.ig,share:c.share,removed:rmKeys.has(kolKey(k)),exists:state.kols.some(x=>kolKey(x)===kolKey(k))};
     });
     setProg(`完成：找到 ${ytResults.length} 位，排除 ${excluded.length} 個頻道。`,1);
@@ -1159,7 +1188,7 @@ function findIgHandles(text){
 function igStatus(html,cls){const m=document.getElementById('ig-conn-msg');m.className='msg'+(cls?' '+cls:'');m.innerHTML=html}
 async function igConnect(){
   IG_TOKEN=document.getElementById('ig-token').value.trim();IG_ME=null;
-  document.getElementById('ig-go').disabled=true;
+  igBusy(true);
   if(!IG_TOKEN){igStatus('請先貼上權杖。','bad');return}
   igStatus('連線中…');
   try{
@@ -1180,69 +1209,116 @@ async function igConnect(){
         exp=days<1?`。<strong>注意：這是短效權杖，大約 ${Math.max(1,Math.round(days*24*60))} 分鐘後過期</strong>，請照下方說明延長成 60 天版本`:`，權杖 ${ds} 到期（剩 ${Math.round(days)} 天）`}
     }catch(e){}
     igStatus(`連線成功：@${esc(IG_ME.username)}${exp}。`,exp.includes('注意')?'bad':'ok');
-    document.getElementById('ig-go').disabled=false;
+    igBusy(false);
   }catch(e){igStatus(esc(e.network?'無法連到 Instagram，請確認網路，或改用 GitHub Pages 上的網址開啟這個系統。':e.message),'bad')}
 }
+function igCtx(){
+  const words=splitTags(document.getElementById('ig-words').value);
+  const negs=splitTags(document.getElementById('ig-negs').value);
+  return {words,negs,label:document.getElementById('ig-label').value.trim()||words[0]||'Instagram',
+    female:clamp(parseFloat(document.getElementById('ig-female').value)||50),age:document.getElementById('ig-age').value,
+    negHit:t=>negs.some(n=>t.toLowerCase().includes(n.toLowerCase()))};
+}
+async function igRaw(h,limit){
+  try{
+    const r=await igGet(IG_ME.id,{fields:`business_discovery.username(${h}){username,name,biography,followers_count,media_count,media.limit(${limit}){caption,like_count,comments_count,view_count,media_type,timestamp}}`});
+    return r.business_discovery;
+  }catch(e){if(e.expired||e.rate||e.network)throw e;return null}
+}
+function igEvaluate(bd,ctx){
+  const {words,negs,negHit}=ctx;
+  const media=((bd.media&&bd.media.data)||[]).slice(0,12);
+  const name=bd.name||bd.username,bio=bd.biography||'';
+  if(!media.length)return {ex:[name,'沒有公開貼文']};
+  const posts=media.map(m=>({title:m.caption||'',tags:[],desc:'',likes:m.like_count,comments:m.comments_count,views:m.view_count,time:m.timestamp?new Date(m.timestamp.replace(/\+0000$/,'Z')):null}));
+  if(isSimplified(posts.map(p=>p.title).join(' ')+bio))return {ex:[name,'以簡體中文為主']};
+  if(negs.length&&negHit(name+' '+bio))return {ex:[name,'名稱或簡介含排除詞']};
+  if(NOT_KOL.test(name)&&!NOT_KOL.test(ctx.words.join(' ')))return {ex:[name,'官方／媒體／機構帳號']};
+  const frac=f=>posts.filter(f).length/posts.length;
+  if(negs.length&&frac(p=>negHit(p.title))>=.3)return {ex:[name,'近期貼文常出現排除詞']};
+  let share=null;
+  if(words.length){
+    share=frac(p=>words.some(w=>p.title.toLowerCase().includes(w.toLowerCase()))&&!(negs.length&&negHit(p.title)));
+    if(share<.25&&!words.some(w=>(name+' '+bio).toLowerCase().includes(w.toLowerCase())))return {ex:[name,'近期貼文提到相關詞的比例太低']};
+  }
+  const avgOf=a=>{a=a.filter(x=>x!=null);return a.length?Math.round(a.reduce((s,x)=>s+x,0)/a.length):null};
+  const likes=avgOf(posts.map(p=>p.likes)),comments=avgOf(posts.map(p=>p.comments)),views=avgOf(posts.map(p=>p.views));
+  const estViews=views==null,now=Date.now(),f=bd.followers_count||0;
+  const k={id:'g'+uid(),name,handle:bd.username,platform:'IG',category:ctx.label,tags:extractTags(posts,words,bd.username,[]),
+    followers:f,avg_views:estViews?(likes||0)*10:views,avg_likes:likes||0,avg_comments:comments||0,
+    posts_30d:posts.filter(p=>p.time&&now-p.time<=30*864e5).length,growth_30d:0,
+    price:estimatePriceIG(f),female_pct:ctx.female,main_age:ctx.age,
+    source:`Instagram API ${today()}（報價與受眾為估計${estViews?'，觀看數以按讚 ×10 估計':''}）`};
+  return {ok:{k,share,estViews}};
+}
+function igProg(t,f){document.getElementById('ig-prog').innerHTML=esc(t)+(f!=null?`<div class="bar"><span style="width:${(f*100).toFixed(0)}%"></span></div>`:'')}
+function igFinish(found,mode,extra){
+  const rmKeys=new Set(state.removed.map(r=>r.key));
+  igResults=found.map(r=>({...r,removed:rmKeys.has(kolKey(r.k)),exists:state.kols.some(x=>kolKey(x)===kolKey(r.k))}));
+  igMode=mode;
+  igProg(extra||`完成：抓到 ${igResults.length} 位，排除 ${igExcluded.length} 個帳號。`,1);
+  renderIgResults();
+}
+function igFail(e){
+  igProg('');
+  document.getElementById('ig-out').innerHTML=`<div class="empty"><p>${esc(e.network?'無法連到 Instagram。':e.message)}</p></div>`;
+  if(e.expired){IG_ME=null;igStatus('權杖已過期，請重新產生後貼上，再按「連線」。','bad')}
+}
+function igBusy(on){['ig-go','ig-snow'].forEach(id=>{document.getElementById(id).disabled=on||!IG_ME})}
+let igMode='fetch';
 async function igFetch(){
-  const out=document.getElementById('ig-out');
   if(!IG_ME){toast('請先按「連線」');return}
   const handles=parseIgHandles(document.getElementById('ig-list').value).slice(0,50);
   if(!handles.length){toast('請輸入至少一個 IG 帳號');return}
-  const words=splitTags(document.getElementById('ig-words').value);
-  const negs=splitTags(document.getElementById('ig-negs').value);
-  const label=document.getElementById('ig-label').value.trim()||words[0]||'Instagram';
-  const female=clamp(parseFloat(document.getElementById('ig-female').value)||50);
-  const age=document.getElementById('ig-age').value;
-  const negHit=t=>negs.some(n=>t.toLowerCase().includes(n.toLowerCase()));
-  const btn=document.getElementById('ig-go');btn.disabled=true;out.innerHTML='';
-  const prog=document.getElementById('ig-prog');
-  const setP=(t,f)=>{prog.innerHTML=esc(t)+(f!=null?`<div class="bar"><span style="width:${(f*100).toFixed(0)}%"></span></div>`:'')};
+  const ctx=igCtx();igBusy(true);document.getElementById('ig-out').innerHTML='';
   const found=[];igExcluded=[];
   try{
     for(let i=0;i<handles.length;i++){
-      const h=handles[i];setP(`抓取 @${h}（${i+1}/${handles.length}）`,i/handles.length);
-      let bd;
-      try{
-        const r=await igGet(IG_ME.id,{fields:`business_discovery.username(${h}){username,name,biography,followers_count,media_count,media.limit(12){caption,like_count,comments_count,view_count,media_type,timestamp}}`});
-        bd=r.business_discovery;
-      }catch(e){
-        if(e.expired||e.rate||e.network)throw e;
-        igExcluded.push([h,'找不到帳號，或不是商業／創作者帳號']);continue;
-      }
-      const media=(bd.media&&bd.media.data)||[];
-      const name=bd.name||bd.username,bio=bd.biography||'';
-      if(!media.length){igExcluded.push([name,'沒有公開貼文']);continue}
-      const posts=media.map(m=>({title:m.caption||'',tags:[],desc:'',likes:m.like_count,comments:m.comments_count,views:m.view_count,time:m.timestamp?new Date(m.timestamp.replace(/\+0000$/,'Z')):null}));
-      if(isSimplified(posts.map(p=>p.title).join(' ')+bio)){igExcluded.push([name,'以簡體中文為主']);continue}
-      if(negs.length&&negHit(name+' '+bio)){igExcluded.push([name,'名稱或簡介含排除詞']);continue}
-      const frac=f=>posts.filter(f).length/posts.length;
-      if(negs.length&&frac(p=>negHit(p.title))>=.3){igExcluded.push([name,'近期貼文常出現排除詞']);continue}
-      let share=null;
-      if(words.length){
-        share=frac(p=>words.some(w=>p.title.toLowerCase().includes(w.toLowerCase()))&&!(negs.length&&negHit(p.title)));
-        if(share<.25&&!words.some(w=>(name+' '+bio).toLowerCase().includes(w.toLowerCase()))){igExcluded.push([name,'近期貼文提到相關詞的比例太低']);continue}
-      }
-      const avgOf=a=>{a=a.filter(x=>x!=null);return a.length?Math.round(a.reduce((s,x)=>s+x,0)/a.length):null};
-      const likes=avgOf(posts.map(p=>p.likes)),comments=avgOf(posts.map(p=>p.comments)),views=avgOf(posts.map(p=>p.views));
-      const estViews=views==null;
-      const now=Date.now();
-      const f=bd.followers_count||0;
-      const k={id:'g'+uid(),name,handle:bd.username,platform:'IG',category:label,tags:extractTags(posts,words,bd.username,[]),
-        followers:f,avg_views:estViews?(likes||0)*10:views,avg_likes:likes||0,avg_comments:comments||0,
-        posts_30d:posts.filter(p=>p.time&&now-p.time<=30*864e5).length,growth_30d:0,
-        price:estimatePriceIG(f),female_pct:female,main_age:age,
-        source:`Instagram API ${today()}（報價與受眾為估計${estViews?'，觀看數以按讚 ×10 估計':''}）`};
-      found.push({k,share,estViews});
+      const h=handles[i];igProg(`抓取 @${h}（${i+1}/${handles.length}）`,i/handles.length);
+      const bd=await igRaw(h,12);
+      if(!bd){igExcluded.push([h,'找不到帳號，或不是商業／創作者帳號']);continue}
+      const r=igEvaluate(bd,ctx);
+      if(r.ex)igExcluded.push(r.ex);else found.push(r.ok);
     }
-    const rmKeys=new Set(state.removed.map(r=>r.key));
-    igResults=found.map(r=>({...r,removed:rmKeys.has(kolKey(r.k)),exists:state.kols.some(x=>kolKey(x)===kolKey(r.k))}));
-    setP(`完成：抓到 ${igResults.length} 位，排除 ${igExcluded.length} 個帳號。`,1);
-    renderIgResults();
-  }catch(e){
-    setP('');
-    out.innerHTML=`<div class="empty"><p>${esc(e.network?'無法連到 Instagram。':e.message)}</p></div>`;
-    if(e.expired){IG_ME=null;igStatus('權杖已過期，請重新產生後貼上，再按「連線」。','bad')}
-  }finally{btn.disabled=!IG_ME}
+    igFinish(found,'fetch');
+  }catch(e){igFail(e)}finally{igBusy(false)}
+}
+/* 雪球式擴散：讀種子帳號的貼文，找出被 @ 標註的帳號，再逐一檢查是否同領域 */
+async function igSnowball(){
+  if(!IG_ME){toast('請先按「連線」');return}
+  const seeds=parseIgHandles(document.getElementById('ig-list').value).slice(0,15);
+  if(!seeds.length){toast('請先在清單放幾個種子帳號');return}
+  const ctx=igCtx();
+  if(!ctx.words.length){toast('擴散找人需要填「相關詞」，才能判斷新帳號是不是同領域');return}
+  const maxCand=Math.max(5,Math.min(40,parseInt(document.getElementById('ig-max').value)||20));
+  igBusy(true);document.getElementById('ig-out').innerHTML='';igExcluded=[];
+  const known=new Set([...seeds,...state.kols.filter(k=>k.platform==='IG').map(k=>String(k.handle).toLowerCase())]);
+  const mentions={};
+  try{
+    for(let i=0;i<seeds.length;i++){
+      const s=seeds[i];igProg(`讀取種子 @${s} 的貼文（${i+1}/${seeds.length}）`,.3*i/seeds.length);
+      const bd=await igRaw(s,25);
+      if(!bd){igExcluded.push([s,'種子帳號查不到']);continue}
+      const text=((bd.media&&bd.media.data)||[]).map(m=>m.caption||'').join('\n')+'\n'+(bd.biography||'');
+      const hs=new Set();
+      (text.match(/@([A-Za-z0-9._]{2,30})/g)||[]).forEach(m=>{const h=m.slice(1).toLowerCase().replace(/\.+$/,'');if(h&&!known.has(h))hs.add(h)});
+      hs.forEach(h=>{(mentions[h]=mentions[h]||new Set()).add(bd.username)});
+    }
+    const cands=Object.entries(mentions).sort((a,b)=>b[1].size-a[1].size).slice(0,maxCand);
+    const total=Object.keys(mentions).length;
+    if(!cands.length){igFinish([],'snow','種子帳號的貼文裡沒有標註新的帳號，換幾個種子試試。');return}
+    const found=[];
+    for(let i=0;i<cands.length;i++){
+      const [h,by]=cands[i];igProg(`檢查被標註的 @${h}（${i+1}/${cands.length}）`,.3+.7*i/cands.length);
+      const bd=await igRaw(h,12);
+      if(!bd){igExcluded.push([h,'個人帳號或查不到（只能查商業／創作者帳號）']);continue}
+      const r=igEvaluate(bd,ctx);
+      if(r.ex){igExcluded.push(r.ex);continue}
+      r.ok.by=[...by];found.push(r.ok);
+    }
+    found.sort((a,b)=>(b.by.length-a.by.length)||(b.share-a.share)||(b.k.followers-a.k.followers));
+    igFinish(found,'snow',`完成：從 ${seeds.length} 個種子找到 ${total} 個被標註的帳號，檢查了 ${cands.length} 個，${found.length} 位符合。`);
+  }catch(e){igFail(e)}finally{igBusy(false)}
 }
 function renderIgResults(){
   const out=document.getElementById('ig-out');
@@ -1251,14 +1327,16 @@ function renderIgResults(){
   if(!igResults.length){out.innerHTML=`<div class="empty"><p>沒有可加入的帳號。</p></div>${exHtml}`;return}
   out.innerHTML=`<div class="panel"><div class="inline" style="justify-content:space-between"><h3 style="margin:0">抓取結果</h3>
     <div class="inline"><button class="btn small" id="ig-all">全選</button><button class="btn primary" id="ig-add">加入勾選的 KOL</button></div></div>
-    <div class="scroll" style="margin-top:10px"><table class="t"><tr><th class="ck"></th><th>帳號</th><th class="n">粉絲</th><th class="n">平均觀看</th><th class="n">平均按讚</th><th class="n">內容相關</th><th class="n">估計報價</th><th>標籤</th></tr>
+    <div class="scroll" style="margin-top:10px"><table class="t"><tr><th class="ck"></th><th>帳號</th><th class="n">粉絲</th><th class="n">平均觀看</th><th class="n">平均按讚</th><th class="n">內容相關</th><th class="n">估計報價</th><th>標籤</th>${igMode==='snow'?'<th>被誰標註</th>':''}</tr>
     ${igResults.map((r,i)=>`<tr><td class="ck"><input type="checkbox" data-gi="${i}" ${r.removed?'':'checked'} aria-label="選取 ${esc(r.k.name)}"></td>
       <td><strong>${esc(r.k.name)}</strong>${r.exists?' <span class="tag">已在資料中，會更新</span>':''}${r.removed?' <span class="risk mid">曾被刪除</span>':''}<br><a class="hint" href="https://www.instagram.com/${encodeURIComponent(r.k.handle)}/" target="_blank" rel="noopener">@${esc(r.k.handle)}</a></td>
       <td class="n">${fmtW(r.k.followers)}</td><td class="n">${fmtW(r.k.avg_views)}${r.estViews?'<span class="hint">*</span>':''}</td><td class="n">${fmtW(r.k.avg_likes)}</td>
       <td class="n">${r.share==null?'—':pct(r.share,0)}</td><td class="n">NT$${fmt(r.k.price)}</td>
-      <td><span class="tags">${r.k.tags.slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</span></td></tr>`).join('')}
-    </table></div>${igResults.some(r=>r.estViews)?'<p class="note">* 近期貼文都是圖片、沒有觀看數，以平均按讚 × 10 估計。</p>':''}${exHtml}</div>`;
+      <td><span class="tags">${r.k.tags.slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</span></td>${igMode==='snow'?`<td class="hint">${(r.by||[]).length} 位：${(r.by||[]).slice(0,3).map(x=>'@'+esc(x)).join('、')}${(r.by||[]).length>3?' 等':''}</td>`:''}</tr>`).join('')}
+    </table></div>${igMode==='snow'?'<div class="inline" style="margin-top:12px"><button class="btn" id="ig-seed">把勾選的帳號加進清單，當下一輪種子</button></div>':''}${igResults.some(r=>r.estViews)?'<p class="note">* 近期貼文都是圖片、沒有觀看數，以平均按讚 × 10 估計。</p>':''}${exHtml}</div>`;
   document.getElementById('ig-all').onclick=()=>out.querySelectorAll('[data-gi]').forEach(c=>c.checked=true);
+  const seedBtn=document.getElementById('ig-seed');
+  if(seedBtn)seedBtn.onclick=()=>{const pick=[...out.querySelectorAll('[data-gi]:checked')].map(c=>igResults[+c.dataset.gi].k.handle.toLowerCase());if(!pick.length){toast('沒有勾選任何帳號');return}const ta=document.getElementById('ig-list');const cur=parseIgHandles(ta.value);pick.forEach(h=>{if(!cur.includes(h))cur.push(h)});ta.value=cur.join('\n');if(ta.scrollIntoView)ta.scrollIntoView({block:'center'});toast(`已加入 ${pick.length} 個種子，再按一次「開始擴散」就會往外找`)};
   document.getElementById('ig-add').onclick=()=>{
     const pick=[...out.querySelectorAll('[data-gi]:checked')].map(c=>igResults[+c.dataset.gi]);
     if(!pick.length){toast('沒有勾選任何帳號');return}
@@ -1285,6 +1363,7 @@ function sendHandlesToIg(handles,label,words,negs){
 }
 document.getElementById('ig-connect').onclick=igConnect;
 document.getElementById('ig-go').onclick=igFetch;
+document.getElementById('ig-snow').onclick=igSnowball;
 bindRemember('yt','yt-key','yt-remember');
 bindRemember('ig','ig-token','ig-remember');
 
