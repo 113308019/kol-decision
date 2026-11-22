@@ -1321,7 +1321,7 @@ async function igFetch(){
   if(!IG_ME){toast('請先按「連線」');return}
   const handles=parseIgHandles(document.getElementById('ig-list').value).slice(0,50);
   if(!handles.length){toast('請輸入至少一個 IG 帳號');return}
-  const ctx={...igCtx(),strict:false};igBusy(true);document.getElementById('ig-out').innerHTML='';
+  const ctx={...igCtx(),strict:false,auto:!document.getElementById('ig-label').value.trim()};igBusy(true);document.getElementById('ig-out').innerHTML='';
   const found=[];igExcluded=[];
   try{
     for(let i=0;i<handles.length;i++){
@@ -1329,7 +1329,8 @@ async function igFetch(){
       const bd=await igRaw(h,12);
       if(!bd){igExcluded.push([h,'找不到帳號，或不是商業／創作者帳號']);continue}
       const r=igEvaluate(bd,ctx);
-      if(r.ex)igExcluded.push(r.ex);else found.push(r.ok);
+      if(r.ex){igExcluded.push(r.ex);continue}
+      r.ok.brand=looksLikeBrand(bd);found.push(r.ok);
     }
     igFinish(found,'fetch');
   }catch(e){igFail(e)}finally{igBusy(false)}
@@ -1343,7 +1344,7 @@ async function igSnowball(){
   const maxCand=Math.max(5,Math.min(60,parseInt(document.getElementById('ig-max').value)||30));
   igBusy(true);document.getElementById('ig-out').innerHTML='';igExcluded=[];
   const known=new Set([...seeds,...state.kols.filter(k=>k.platform==='IG').map(k=>String(k.handle).toLowerCase())]);
-  const mentions={},seedNames={};let postsRead=0,seedsOk=0;
+  const mentions={},seedNames={};let postsRead=0,seedsOk=0,textPosts=0;
   try{
     for(let i=0;i<seeds.length;i++){
       const s=seeds[i];igProg(`讀取種子 @${s} 的貼文（${i+1}/${seeds.length}）`,.3*i/seeds.length);
@@ -1358,7 +1359,7 @@ async function igSnowball(){
           after=m2.paging&&m2.paging.cursors&&m2.paging.cursors.after;
         }catch(e){if(e.expired||e.rate||e.network)throw e;break}
       }
-      seedsOk++;seedNames[s]=bd.name||'';postsRead+=caps.length;
+      seedsOk++;seedNames[s]=bd.name||'';postsRead+=caps.length;textPosts+=caps.filter(c=>c.trim()).length;
       const text=caps.join('\n')+'\n'+(bd.biography||'');
       const hs=new Set();
       (text.match(/@([A-Za-z0-9._]{2,30})/g)||[]).forEach(m=>{const h=m.slice(1).toLowerCase().replace(/\.+$/,'');if(h&&!known.has(h))hs.add(h)});
@@ -1366,7 +1367,7 @@ async function igSnowball(){
     }
     const cands=Object.entries(mentions).sort((a,b)=>b[1].size-a[1].size).slice(0,maxCand);
     const total=Object.keys(mentions).length;
-    if(!cands.length){igFinish([],'snow',seedsOk?`讀了 ${seedsOk} 個種子共 ${postsRead} 篇貼文，內文裡沒有 @ 標註其他帳號。很多創作者是用「照片標註」或「共同創作」功能標人，這兩種 Instagram API 讀不到，所以要換幾個習慣在內文 @ 別人的種子（例如常發合作、團購、出遊合照的人），或改從 YouTube 影片說明裡的來賓帳號開始。`:'種子帳號都查不到。');return}
+    if(!cands.length){igFinish([],'snow',seedsOk?`讀了 ${seedsOk} 個種子共 ${postsRead} 篇貼文（${textPosts} 篇有文字），內文裡沒有 @ 標註其他帳號。很多創作者是用「照片標註」或「共同創作」功能標人，這兩種 Instagram API 讀不到，所以要換幾個習慣在內文 @ 別人的種子（例如常發合作、團購、出遊合照的人），或改從 YouTube 影片說明裡的來賓帳號開始。`:'種子帳號都查不到。');return}
     const found=[];
     for(let i=0;i<cands.length;i++){
       const [h,by]=cands[i];igProg(`檢查被標註的 @${h}（${i+1}/${cands.length}）`,.3+.7*i/cands.length);
@@ -1394,11 +1395,11 @@ function renderIgResults(){
   if(!igResults.length){out.innerHTML=`<div class="empty"><p>沒有可加入的帳號。</p></div>${exHtml}`;return}
   out.innerHTML=`<div class="panel"><div class="inline" style="justify-content:space-between"><h3 style="margin:0">抓取結果</h3>
     <div class="inline"><button class="btn small" id="ig-all">全選</button><button class="btn primary" id="ig-add">加入勾選的 KOL</button></div></div>
-    <div class="scroll" style="margin-top:10px"><table class="t"><tr><th class="ck"></th><th>帳號</th><th class="n">粉絲</th><th class="n">平均觀看</th><th class="n">平均按讚</th><th class="n">內容相關</th><th class="n">估計報價</th>${igMode==='snow'?'<th>自動分類</th>':''}<th>標籤</th>${igMode==='snow'?'<th>被誰標註</th>':''}</tr>
-    ${igResults.map((r,i)=>`<tr><td class="ck"><input type="checkbox" data-gi="${i}" ${r.removed||r.low?'':'checked'} aria-label="選取 ${esc(r.k.name)}"></td>
+    <div class="scroll" style="margin-top:10px"><table class="t"><tr><th class="ck"></th><th>帳號</th><th class="n">粉絲</th><th class="n">平均觀看</th><th class="n">平均按讚</th><th class="n">內容相關</th><th class="n">估計報價</th><th>分類</th><th>標籤</th>${igMode==='snow'?'<th>被誰標註</th>':''}</tr>
+    ${igResults.map((r,i)=>`<tr><td class="ck"><input type="checkbox" data-gi="${i}" ${r.removed||r.low||r.brand?'':'checked'} aria-label="選取 ${esc(r.k.name)}"></td>
       <td><strong>${esc(r.k.name)}</strong>${r.exists?' <span class="tag">已在資料中，會更新</span>':''}${r.removed?' <span class="risk mid">曾被刪除</span>':''}<br><a class="hint" href="https://www.instagram.com/${encodeURIComponent(r.k.handle)}/" target="_blank" rel="noopener">@${esc(r.k.handle)}</a></td>
       <td class="n">${fmtW(r.k.followers)}</td><td class="n">${fmtW(r.k.avg_views)}${r.estViews?'<span class="hint">*</span>':''}</td><td class="n">${fmtW(r.k.avg_likes)}</td>
-      <td class="n">${r.share==null?'—':pct(r.share,0)}${r.low?'<br><span class="risk mid">相關度低</span>':''}</td><td class="n">NT$${fmt(r.k.price)}</td>${igMode==='snow'?`<td><span class="tag hit">${esc(r.k.category)}</span></td>`:''}
+      <td class="n">${r.share==null?'—':pct(r.share,0)}${r.low?'<br><span class="risk mid">相關度低</span>':''}</td><td class="n">NT$${fmt(r.k.price)}</td><td><span class="tag hit">${esc(r.k.category)}</span>${r.brand?'<br><span class="risk mid">疑似品牌／店家</span>':''}</td>
       <td><span class="tags">${r.k.tags.slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</span></td>${igMode==='snow'?`<td class="hint">${(r.by||[]).length} 位：${(r.by||[]).slice(0,3).map(x=>'@'+esc(x)).join('、')}${(r.by||[]).length>3?' 等':''}</td>`:''}</tr>`).join('')}
     </table></div>${igMode==='snow'?'<div class="inline" style="margin-top:12px"><button class="btn" id="ig-seed">把勾選的帳號加進清單，當下一輪種子</button></div>':''}${igResults.some(r=>r.low)?'<p class="note">標「相關度低」的帳號，近期貼文很少直接寫到你的相關詞，所以預設不勾選。如果你確定要找他，自己勾起來就好；也可以換更具體的相關詞，例如把「生活」改成「日常、vlog、家庭、穿搭」。</p>':''}${igResults.some(r=>r.estViews)?'<p class="note">* 近期貼文都是圖片、沒有觀看數，以平均按讚 × 10 估計。</p>':''}${exHtml}</div>`;
   document.getElementById('ig-all').onclick=()=>out.querySelectorAll('[data-gi]').forEach(c=>c.checked=true);
