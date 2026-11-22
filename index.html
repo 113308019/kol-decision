@@ -971,7 +971,7 @@ const PROMO_TAG=/留言|訂閱|蝦皮|商城|連結|合作|贊助|優惠|折扣|
 const SIMPLIFIED=new Set('们这个说为东国时会来对发经过见长门问间关头实现点学书车马鸟龙电视听让给还没认气热习无边应该样产业专营养饮药医疗护体动运练节脑颈壳杨级际软件画视频');
 const STOP_TAGS=new Set(['vlog','youtube','youtuber','shorts','short','台灣','taiwan','tw','影片','video','推薦','分享','教學','日常','生活','記錄','开箱','開箱','hd','4k','直播','live','ep','免費']);
 const TOPIC_ZH={Health:'健康',Physical_fitness:'健身',Sport:'運動',Food:'美食',Tourism:'旅遊',Technology:'科技',Fashion:'時尚',Physical_attractiveness:'美妝','Lifestyle_(sociology)':'生活風格',Video_game_culture:'遊戲',Hobby:'嗜好',Pet:'寵物',Vehicle:'汽車',Knowledge:'知識'};
-let ytResults=[];
+let ytResults=[],ytGuests={};
 const hasCJK=t=>/[一-鿿]/.test(t||'');
 function isSimplified(t){const c=(t||'').match(/[一-鿿]/g)||[];const h=c.filter(x=>SIMPLIFIED.has(x)).length;return h>=3&&h/Math.max(1,c.length)>.03}
 const estimatePrice=subs=>Math.round((8000+subs*.25)/1000)*1000;
@@ -1063,7 +1063,7 @@ async function ytSearch(){
         const items=pl.items||[];if(!items.length){excluded.push([title,'沒有近期影片']);continue}
         const times=items.map(x=>x.contentDetails.videoPublishedAt).filter(Boolean).map(t=>new Date(t));
         const vs=await ytGet('videos',{part:'snippet,statistics,status',id:items.map(x=>x.contentDetails.videoId).join(',')});
-        const vids=(vs.items||[]).map(v=>({title:v.snippet.title||'',tags:v.snippet.tags||[],desc:(v.snippet.description||'').slice(0,400),cat:v.snippet.categoryId,kids:!!(v.status&&v.status.madeForKids),
+        const vids=(vs.items||[]).map(v=>({title:v.snippet.title||'',tags:v.snippet.tags||[],desc:(v.snippet.description||'').slice(0,400),full:(v.snippet.description||'').slice(0,3000),cat:v.snippet.categoryId,kids:!!(v.status&&v.status.madeForKids),
           views:+v.statistics.viewCount||0,likes:v.statistics.likeCount!=null?+v.statistics.likeCount:null,comments:v.statistics.commentCount!=null?+v.statistics.commentCount:null}));
         if(!vids.length){excluded.push([title,'沒有近期影片']);continue}
         const frac=f=>vids.filter(f).length/vids.length;
@@ -1079,12 +1079,17 @@ async function ytSearch(){
         c.data={avg_views:avgOf(vids.map(v=>v.views)),avg_likes:avgOf(vids.map(v=>v.likes)),avg_comments:avgOf(vids.map(v=>v.comments)),posts_30d:times.filter(t=>now-t<=30*864e5).length};
         c.share=share;c.score=3*share+.5*Math.min(c.hits,3)+(c.chMatch?1:0);
         c.tags=extractTags(vids,words,title,c.topics);
-        c.ig=findIgHandles((c.ch.snippet.description||'')+' '+vids.map(v=>v.desc).join(' '))[0]||'';
+        {const own=findIgHandles(c.ch.snippet.description||''),cnt=countIgHandles(vids.map(v=>v.full));
+         const freq=Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
+         c.ig=own[0]||(freq.length&&freq[0][1]>=Math.max(2,vids.length*.5)?freq[0][0]:'');
+         c.guests=freq.map(x=>x[0]).filter(h=>h!==c.ig&&!own.includes(h));}
         scored.push(c);
       }catch(e){if(e.network)throw e;excluded.push([title,'讀取失敗']);}
     }
     scored.sort((a,b)=>(b.score-a.score)||(b.subs-a.subs));
     const rmKeys=new Set(state.removed.map(r=>r.key));
+    ytGuests={};
+    scored.forEach(c=>(c.guests||[]).forEach(h=>{(ytGuests[h]=ytGuests[h]||new Set()).add(c.ch.snippet.title)}));
     ytResults=scored.slice(0,want).map(c=>{
       const sn=c.ch.snippet,handle=(sn.customUrl||c.ch.id).replace(/^@/,'');
       const k={id:'y'+uid(),name:sn.title,handle,platform:'YouTube',category:label,tags:c.tags,followers:c.subs,...c.data,growth_30d:0,
@@ -1111,7 +1116,9 @@ function renderYtResults(excluded){
       <td class="n">${fmtW(r.k.followers)}</td><td class="n">${fmtW(r.k.avg_views)}</td><td class="n">${pct(r.share,0)}</td><td class="n">NT$${fmt(r.k.price)}</td>
       <td><span class="tags">${r.k.tags.slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</span></td>
       <td>${r.ig?`<a class="hint" href="https://www.instagram.com/${encodeURIComponent(r.ig)}/" target="_blank" rel="noopener">@${esc(r.ig)}</a>`:'<span class="hint">—</span>'}</td></tr>`).join('')}
-    </table></div>${ytResults.some(r=>r.ig)?`<div class="inline" style="margin-top:12px"><button class="btn" id="yt-to-ig">把找到的 ${ytResults.filter(r=>r.ig).length} 個 IG 帳號帶到「Instagram 抓取」</button><span class="hint">從頻道簡介和影片說明裡的 IG 連結找到的</span></div>`:''}${exHtml}</div>`;
+    </table></div>${(()=>{const own=new Set(ytResults.map(r=>r.ig).filter(Boolean));const g=Object.keys(ytGuests).filter(h=>!own.has(h));return g.length?`<div class="inline" style="margin-top:12px"><button class="btn" id="yt-guests-ig">把影片裡提到的 ${g.length} 個其他 IG 帳號帶到「Instagram 抓取」</button><span class="hint">來賓、合作對象、被推薦的創作者，很多人沒有自己的 YouTube</span></div>`:''})()}${ytResults.some(r=>r.ig)?`<div class="inline" style="margin-top:12px"><button class="btn" id="yt-to-ig">把找到的 ${ytResults.filter(r=>r.ig).length} 個 IG 帳號帶到「Instagram 抓取」</button><span class="hint">從頻道簡介和影片說明裡的 IG 連結找到的</span></div>`:''}${exHtml}</div>`;
+  const gBtn=document.getElementById('yt-guests-ig');
+  if(gBtn)gBtn.onclick=()=>{const own=new Set(ytResults.map(r=>r.ig).filter(Boolean));sendHandlesToIg(Object.entries(ytGuests).filter(([h])=>!own.has(h)).sort((a,b)=>b[1].size-a[1].size).map(x=>x[0]).slice(0,50),document.getElementById('yt-label').value.trim(),document.getElementById('yt-words').value.trim(),document.getElementById('yt-negs').value.trim())};
   const toIg=document.getElementById('yt-to-ig');
   if(toIg)toIg.onclick=()=>sendHandlesToIg(ytResults.filter(r=>r.ig).map(r=>r.ig),document.getElementById('yt-label').value.trim(),document.getElementById('yt-words').value.trim(),document.getElementById('yt-negs').value.trim());
   document.getElementById('yt-all').onclick=()=>out.querySelectorAll('[data-yi]').forEach(c=>c.checked=true);
@@ -1181,9 +1188,22 @@ function parseIgHandles(text){
   return out;
 }
 function findIgHandles(text){
-  const out=[],re=/instagram\.com\/([A-Za-z0-9._]+)/gi;let m;
-  while((m=re.exec(text||''))){const h=m[1].toLowerCase().replace(/\.$/,'');if(!['p','reel','reels','explore','stories','tv','accounts'].includes(h)&&!out.includes(h))out.push(h)}
+  const out=[],bad=['p','reel','reels','explore','stories','tv','accounts','com','www','https','http'];
+  const add=h=>{h=(h||'').toLowerCase().replace(/\.+$/,'');if(h.length>=2&&/^[a-z0-9._]+$/.test(h)&&!bad.includes(h)&&!out.includes(h))out.push(h)};
+  const t=text||'';let m;
+  const re1=/instagram\.com\/([A-Za-z0-9._]+)/gi;while((m=re1.exec(t)))add(m[1]);
+  const re2=/(?:\bIG|Instagram|ＩＧ)\s*(?:帳號)?\s*[:：]?\s*@([A-Za-z0-9._]{2,30})/gi;while((m=re2.exec(t)))add(m[1]);
+  const re3=/(?:\bIG|Instagram|ＩＧ)\s*(?:帳號)?\s*[:：]\s*([A-Za-z0-9._]{2,30})/gi;while((m=re3.exec(t)))add(m[1]);
   return out;
+}
+function countIgHandles(texts){const c={};texts.forEach(t=>findIgHandles(t).forEach(h=>c[h]=(c[h]||0)+1));return c}
+const normHandle=h=>String(h||'').toLowerCase().replace(/[._\d]/g,'');
+function looksLikeAlias(h,name,seedHandles,seedNames){
+  const n=normHandle(h);
+  for(const s of seedHandles){const m=normHandle(s);if(m.length>=4&&n.length>=4&&(n.includes(m)||m.includes(n)))return s}
+  const nm=String(name||'').trim().toLowerCase();
+  if(nm.length>=2)for(const [s,sn] of Object.entries(seedNames)){const x=String(sn||'').trim().toLowerCase();if(x.length>=2&&(nm===x||(x.length>=3&&nm.includes(x))||(nm.length>=3&&x.includes(nm))))return s}
+  return null;
 }
 function igStatus(html,cls){const m=document.getElementById('ig-conn-msg');m.className='msg'+(cls?' '+cls:'');m.innerHTML=html}
 async function igConnect(){
@@ -1293,12 +1313,13 @@ async function igSnowball(){
   const maxCand=Math.max(5,Math.min(40,parseInt(document.getElementById('ig-max').value)||20));
   igBusy(true);document.getElementById('ig-out').innerHTML='';igExcluded=[];
   const known=new Set([...seeds,...state.kols.filter(k=>k.platform==='IG').map(k=>String(k.handle).toLowerCase())]);
-  const mentions={};
+  const mentions={},seedNames={};let postsRead=0,seedsOk=0;
   try{
     for(let i=0;i<seeds.length;i++){
       const s=seeds[i];igProg(`讀取種子 @${s} 的貼文（${i+1}/${seeds.length}）`,.3*i/seeds.length);
-      const bd=await igRaw(s,25);
-      if(!bd){igExcluded.push([s,'種子帳號查不到']);continue}
+      const bd=(await igRaw(s,50))||(await igRaw(s,25));
+      if(!bd){igExcluded.push([s,'種子帳號查不到（要是商業或創作者帳號）']);continue}
+      seedsOk++;seedNames[s]=bd.name||'';postsRead+=((bd.media&&bd.media.data)||[]).length;
       const text=((bd.media&&bd.media.data)||[]).map(m=>m.caption||'').join('\n')+'\n'+(bd.biography||'');
       const hs=new Set();
       (text.match(/@([A-Za-z0-9._]{2,30})/g)||[]).forEach(m=>{const h=m.slice(1).toLowerCase().replace(/\.+$/,'');if(h&&!known.has(h))hs.add(h)});
@@ -1306,18 +1327,22 @@ async function igSnowball(){
     }
     const cands=Object.entries(mentions).sort((a,b)=>b[1].size-a[1].size).slice(0,maxCand);
     const total=Object.keys(mentions).length;
-    if(!cands.length){igFinish([],'snow','種子帳號的貼文裡沒有標註新的帳號，換幾個種子試試。');return}
+    if(!cands.length){igFinish([],'snow',seedsOk?`讀了 ${seedsOk} 個種子共 ${postsRead} 篇貼文，內文裡沒有 @ 標註其他帳號。很多創作者是用「照片標註」或「共同創作」功能標人，這兩種 Instagram API 讀不到，所以要換幾個習慣在內文 @ 別人的種子（例如常發合作、團購、出遊合照的人），或改從 YouTube 影片說明裡的來賓帳號開始。`:'種子帳號都查不到。');return}
     const found=[];
     for(let i=0;i<cands.length;i++){
       const [h,by]=cands[i];igProg(`檢查被標註的 @${h}（${i+1}/${cands.length}）`,.3+.7*i/cands.length);
+      const alias0=looksLikeAlias(h,'',seeds,{});
+      if(alias0){igExcluded.push([h,`疑似種子本人的其他帳號（@${alias0}）`]);continue}
       const bd=await igRaw(h,12);
       if(!bd){igExcluded.push([h,'個人帳號或查不到（只能查商業／創作者帳號）']);continue}
+      const alias=looksLikeAlias(bd.username,bd.name,seeds,seedNames);
+      if(alias){igExcluded.push([bd.name||h,`疑似種子本人的其他帳號（@${alias}）`]);continue}
       const r=igEvaluate(bd,ctx);
       if(r.ex){igExcluded.push(r.ex);continue}
       r.ok.by=[...by];found.push(r.ok);
     }
     found.sort((a,b)=>(b.by.length-a.by.length)||(b.share-a.share)||(b.k.followers-a.k.followers));
-    igFinish(found,'snow',`完成：從 ${seeds.length} 個種子找到 ${total} 個被標註的帳號，檢查了 ${cands.length} 個，${found.length} 位符合。`);
+    igFinish(found,'snow',`完成：讀了 ${seedsOk} 個種子共 ${postsRead} 篇貼文，找到 ${total} 個被標註的帳號，檢查了 ${cands.length} 個，${found.length} 位符合。`);
   }catch(e){igFail(e)}finally{igBusy(false)}
 }
 function renderIgResults(){
