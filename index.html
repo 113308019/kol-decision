@@ -217,6 +217,7 @@ table.t td.ck,table.t th.ck{width:32px}
   <a href="#ranking" data-view="ranking">KOL 排名</a>
   <a href="#review" data-view="review">結案回填</a>
   <a href="#youtube" data-view="youtube">YouTube 搜尋</a>
+  <a href="#instagram" data-view="instagram">Instagram 抓取</a>
   <a href="#data" data-view="data">資料與模型</a>
 </nav>
 <main>
@@ -275,10 +276,11 @@ table.t td.ck,table.t th.ck{width:32px}
     <p class="hint" style="margin-bottom:16px">用關鍵字找台灣的 YouTuber，直接從 YouTube Data API 抓數據，勾選後加入 KOL 資料，不需要終端機。</p>
     <div class="panel">
       <h3>API key</h3>
-      <p class="hint">key 只存在這個分頁的記憶體裡，重新整理或關閉頁面就會清除，不會存檔或同步給任何人。建議到 Google Cloud Console 把這把 key 設定為只允許 YouTube Data API v3。</p>
+      <p class="hint">key 預設只存在這個分頁的記憶體裡，重新整理就會清除。勾選「記住」會存在這台裝置的瀏覽器，不會同步給任何人；公用電腦請不要勾。建議到 Google Cloud Console 把這把 key 設定為只允許 YouTube Data API v3。</p>
       <div class="inline" style="margin-top:10px">
         <input type="password" id="yt-key" aria-label="YouTube API key" placeholder="AIza…" autocomplete="off" style="min-width:280px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px">
         <button class="btn" id="yt-test">測試連線</button>
+        <label class="inline" style="font-size:14px"><input type="checkbox" id="yt-remember">在這台裝置記住</label>
       </div>
       <div class="msg" id="yt-test-msg" role="status"></div>
     </div>
@@ -298,6 +300,44 @@ table.t td.ck,table.t th.ck{width:32px}
       <div class="prog" id="yt-prog" aria-live="polite"></div>
     </div>
     <div id="yt-out" style="margin-top:16px"></div>
+  </section>
+
+  <section class="view" id="view-instagram" hidden>
+    <h2>Instagram 抓取</h2>
+    <p class="hint" style="margin-bottom:16px">輸入 IG 帳號清單，系統抓粉絲數和近期 12 篇貼文的數據，自動判斷內容是否相關、產生標籤。Instagram 不開放用關鍵字找創作者，可以先在「YouTube 搜尋」找人，再把他們的 IG 帳號一鍵帶過來。</p>
+    <div class="panel">
+      <h3>1. 連接 Instagram</h3>
+      <p class="hint">貼上 Meta 存取權杖就好，系統會自動找到你的 IG 專業帳號。權杖能讀取你的商家帳號資料，請勿分享給別人；勾選「記住」只會存在這台裝置的瀏覽器。</p>
+      <div class="inline" style="margin-top:10px">
+        <input type="password" id="ig-token" aria-label="Meta 存取權杖" placeholder="EAA…" autocomplete="off" style="min-width:280px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px">
+        <button class="btn" id="ig-connect">連線</button>
+        <label class="inline" style="font-size:14px"><input type="checkbox" id="ig-remember">在這台裝置記住</label>
+      </div>
+      <div class="inline" style="margin-top:10px" hidden><label for="ig-acct" class="hint">使用的 IG 帳號</label><select id="ig-acct" style="border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 10px"></select></div>
+      <div class="msg" id="ig-conn-msg" role="status"></div>
+      <details style="margin-top:12px"><summary class="hint" style="cursor:pointer">還沒有權杖，或權杖過期了？（點開看取得方式）</summary>
+        <ol class="ex" style="line-height:1.8">
+          <li>打開 <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener">Graph API 測試工具</a>，「Meta 應用程式」選你們的 App，「用戶或粉絲專頁」選「用戶權杖」。</li>
+          <li>權限要有：<code>pages_show_list</code>、<code>business_management</code>、<code>instagram_basic</code>、<code>instagram_manage_insights</code>、<code>pages_read_engagement</code>。</li>
+          <li>按「Generate Access Token」，授權時選「所有粉絲專頁和 Instagram 帳號」。</li>
+          <li>點權杖左邊的 ⓘ →「在存取權杖工具中開啟」→ 最下面按「延伸存取權杖」，複製新的那串（60 天有效），貼到上面的欄位。</li>
+        </ol>
+      </details>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <h3>2. 要查詢的帳號</h3>
+      <div class="yt-form">
+        <div class="wide"><label for="ig-list">IG 帳號（一行一個，可以貼 @帳號 或 IG 網址）</label><textarea id="ig-list" style="min-height:110px;font-family:inherit;font-size:14px" placeholder="@someone&#10;https://www.instagram.com/another/"></textarea></div>
+        <div><label for="ig-words">相關詞（可留空，留空就不篩選）</label><input id="ig-words" type="text" placeholder="汽車、車用、改裝"></div>
+        <div><label for="ig-negs">排除詞（可留空）</label><input id="ig-negs" type="text" placeholder="玩具、模型"></div>
+        <div><label for="ig-label">分類名稱</label><input id="ig-label" type="text" placeholder="留空 = 第一個相關詞"></div>
+        <div><label for="ig-female">受眾女性比例估計（%）</label><input id="ig-female" type="number" min="0" max="100" value="50"></div>
+        <div><label for="ig-age">主要受眾年齡</label><select id="ig-age"><option>18-24</option><option selected>25-34</option><option>35-44</option><option>45+</option></select></div>
+      </div>
+      <div class="inline" style="margin-top:14px"><button class="btn primary" id="ig-go" disabled>抓取</button><span class="hint">一次最多 50 個帳號。只能查商業或創作者帳號。</span></div>
+      <div class="prog" id="ig-prog" aria-live="polite"></div>
+    </div>
+    <div id="ig-out" style="margin-top:16px"></div>
   </section>
 
   <section class="view" id="view-data" hidden>
@@ -1010,6 +1050,7 @@ async function ytSearch(){
         c.data={avg_views:avgOf(vids.map(v=>v.views)),avg_likes:avgOf(vids.map(v=>v.likes)),avg_comments:avgOf(vids.map(v=>v.comments)),posts_30d:times.filter(t=>now-t<=30*864e5).length};
         c.share=share;c.score=3*share+.5*Math.min(c.hits,3)+(c.chMatch?1:0);
         c.tags=extractTags(vids,words,title,c.topics);
+        c.ig=findIgHandles((c.ch.snippet.description||'')+' '+vids.map(v=>v.desc).join(' '))[0]||'';
         scored.push(c);
       }catch(e){if(e.network)throw e;excluded.push([title,'讀取失敗']);}
     }
@@ -1019,7 +1060,7 @@ async function ytSearch(){
       const sn=c.ch.snippet,handle=(sn.customUrl||c.ch.id).replace(/^@/,'');
       const k={id:'y'+uid(),name:sn.title,handle,platform:'YouTube',category:label,tags:c.tags,followers:c.subs,...c.data,growth_30d:0,
         price:estimatePrice(c.subs),female_pct:female,main_age:age,source:`YouTube API ${today()}（報價與受眾為估計）`};
-      return {k,share:c.share,removed:rmKeys.has(kolKey(k)),exists:state.kols.some(x=>kolKey(x)===kolKey(k))};
+      return {k,ig:c.ig,share:c.share,removed:rmKeys.has(kolKey(k)),exists:state.kols.some(x=>kolKey(x)===kolKey(k))};
     });
     setProg(`完成：找到 ${ytResults.length} 位，排除 ${excluded.length} 個頻道。`,1);
     renderYtResults(excluded);
@@ -1035,12 +1076,15 @@ function renderYtResults(excluded){
   if(!ytResults.length){out.innerHTML=`<div class="empty"><p>沒有符合條件的頻道。可以換關鍵字、多給幾個相關詞，或降低最少訂閱數。</p></div>${exHtml}`;return}
   out.innerHTML=`<div class="panel"><div class="inline" style="justify-content:space-between"><h3 style="margin:0">搜尋結果</h3>
     <div class="inline"><button class="btn small" id="yt-all">全選</button><button class="btn primary" id="yt-add">加入勾選的 KOL</button></div></div>
-    <div class="scroll" style="margin-top:10px"><table class="t"><tr><th class="ck"></th><th>頻道</th><th class="n">訂閱</th><th class="n">平均觀看</th><th class="n">內容相關</th><th class="n">估計報價</th><th>標籤</th></tr>
+    <div class="scroll" style="margin-top:10px"><table class="t"><tr><th class="ck"></th><th>頻道</th><th class="n">訂閱</th><th class="n">平均觀看</th><th class="n">內容相關</th><th class="n">估計報價</th><th>標籤</th><th>IG</th></tr>
     ${ytResults.map((r,i)=>`<tr><td class="ck"><input type="checkbox" data-yi="${i}" ${r.removed?'':'checked'} aria-label="選取 ${esc(r.k.name)}"></td>
       <td><strong>${esc(r.k.name)}</strong>${r.exists?' <span class="tag">已在資料中，會更新</span>':''}${r.removed?' <span class="risk mid">曾被刪除</span>':''}<br><a class="hint" href="https://www.youtube.com/@${encodeURIComponent(r.k.handle)}" target="_blank" rel="noopener">@${esc(r.k.handle)}</a></td>
       <td class="n">${fmtW(r.k.followers)}</td><td class="n">${fmtW(r.k.avg_views)}</td><td class="n">${pct(r.share,0)}</td><td class="n">NT$${fmt(r.k.price)}</td>
-      <td><span class="tags">${r.k.tags.slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</span></td></tr>`).join('')}
-    </table></div>${exHtml}</div>`;
+      <td><span class="tags">${r.k.tags.slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</span></td>
+      <td>${r.ig?`<a class="hint" href="https://www.instagram.com/${encodeURIComponent(r.ig)}/" target="_blank" rel="noopener">@${esc(r.ig)}</a>`:'<span class="hint">—</span>'}</td></tr>`).join('')}
+    </table></div>${ytResults.some(r=>r.ig)?`<div class="inline" style="margin-top:12px"><button class="btn" id="yt-to-ig">把找到的 ${ytResults.filter(r=>r.ig).length} 個 IG 帳號帶到「Instagram 抓取」</button><span class="hint">從頻道簡介和影片說明裡的 IG 連結找到的</span></div>`:''}${exHtml}</div>`;
+  const toIg=document.getElementById('yt-to-ig');
+  if(toIg)toIg.onclick=()=>sendHandlesToIg(ytResults.filter(r=>r.ig).map(r=>r.ig),document.getElementById('yt-label').value.trim(),document.getElementById('yt-words').value.trim(),document.getElementById('yt-negs').value.trim());
   document.getElementById('yt-all').onclick=()=>out.querySelectorAll('[data-yi]').forEach(c=>c.checked=true);
   document.getElementById('yt-add').onclick=()=>{
     const pick=[...out.querySelectorAll('[data-yi]:checked')].map(c=>ytResults[+c.dataset.yi]);
@@ -1066,7 +1110,185 @@ document.getElementById('yt-test').onclick=async()=>{
   catch(e){m.className='msg bad';m.textContent=e.network?ytNetworkMsg():e.message}
 };
 
-const VIEWS=['recommend','ranking','review','youtube','data'];
+
+/* ---------- 記住金鑰（選用，只存在這台裝置） ---------- */
+const SECRET_KEYS={yt:'kol-yt-key',ig:'kol-ig-token'};
+function loadSecret(kind){try{return localStorage.getItem(SECRET_KEYS[kind])||''}catch(e){return ''}}
+function saveSecret(kind,val,remember){try{if(remember&&val)localStorage.setItem(SECRET_KEYS[kind],val);else localStorage.removeItem(SECRET_KEYS[kind])}catch(e){}}
+function bindRemember(kind,inputId,boxId){
+  const inp=document.getElementById(inputId),box=document.getElementById(boxId);
+  const v=loadSecret(kind);if(v){inp.value=v;box.checked=true}
+  const sync=()=>saveSecret(kind,inp.value.trim(),box.checked);
+  box.addEventListener('change',sync);inp.addEventListener('change',sync);
+}
+
+/* ---------- Instagram ---------- */
+const IG_BASE='https://graph.facebook.com/v27.0/';
+let IG_TOKEN='',IG_ME=null,igResults=[],igExcluded=[];
+const estimatePriceIG=f=>Math.round((5000+f*.2)/1000)*1000;
+async function igGet(path,params){
+  const u=new URL(IG_BASE+path);
+  Object.entries({...params,access_token:IG_TOKEN}).forEach(([k,v])=>u.searchParams.set(k,v));
+  let r;
+  try{r=await fetch(u.toString())}catch(e){const err=new Error('network');err.network=true;throw err}
+  const d=await r.json().catch(()=>({}));
+  if(d.error){
+    const err=new Error(d.error.message||'Instagram API 錯誤');err.code=d.error.code;err.sub=d.error.error_subcode;
+    if(d.error.code===190){err.expired=true;err.message='權杖無效或已過期，請重新產生並延長成 60 天版本。'}
+    else if(d.error.code===4||d.error.code===17||d.error.code===32){err.rate=true;err.message='查詢太頻繁，被 Instagram 暫時限制，請等一小時後再試。'}
+    throw err;
+  }
+  return d;
+}
+function parseIgHandles(text){
+  const out=[];
+  String(text||'').split(/[\s,，、;；]+/).forEach(t=>{
+    t=t.trim();if(!t)return;
+    const m=t.match(/instagram\.com\/([A-Za-z0-9._]+)/i);
+    let h=(m?m[1]:t).replace(/^@/,'').replace(/[/?#].*$/,'').toLowerCase();
+    if(!/^[a-z0-9._]{1,30}$/.test(h)||['p','reel','reels','explore','stories','tv'].includes(h))return;
+    if(!out.includes(h))out.push(h);
+  });
+  return out;
+}
+function findIgHandles(text){
+  const out=[],re=/instagram\.com\/([A-Za-z0-9._]+)/gi;let m;
+  while((m=re.exec(text||''))){const h=m[1].toLowerCase().replace(/\.$/,'');if(!['p','reel','reels','explore','stories','tv','accounts'].includes(h)&&!out.includes(h))out.push(h)}
+  return out;
+}
+function igStatus(html,cls){const m=document.getElementById('ig-conn-msg');m.className='msg'+(cls?' '+cls:'');m.innerHTML=html}
+async function igConnect(){
+  IG_TOKEN=document.getElementById('ig-token').value.trim();IG_ME=null;
+  document.getElementById('ig-go').disabled=true;
+  if(!IG_TOKEN){igStatus('請先貼上權杖。','bad');return}
+  igStatus('連線中…');
+  try{
+    const r=await igGet('me/accounts',{fields:'name,instagram_business_account{id,username}',limit:100});
+    const accts=(r.data||[]).filter(p=>p.instagram_business_account).map(p=>({page:p.name,id:p.instagram_business_account.id,username:p.instagram_business_account.username}));
+    if(!accts.length){igStatus((r.data||[]).length?'權杖可以用，但你的粉絲專頁都沒有連結 IG 專業帳號。請在 IG App 的「編輯個人檔案 → 粉絲專頁」連結後，重新產生權杖。':'權杖可以用，但查不到任何粉絲專頁。產生權杖時，授權視窗請選「所有粉絲專頁和 Instagram 帳號」，並確認有勾 business_management 權限。','bad');return}
+    const sel=document.getElementById('ig-acct');
+    sel.innerHTML=accts.map((a,i)=>`<option value="${i}">@${esc(a.username)}（粉專：${esc(a.page)}）</option>`).join('');
+    sel.parentElement.hidden=accts.length<2;
+    sel.onchange=()=>{IG_ME=accts[+sel.value]};
+    IG_ME=accts[0];
+    let exp='';
+    try{
+      const d=await igGet('debug_token',{input_token:IG_TOKEN});
+      const t=d.data&&d.data.expires_at;
+      if(t===0)exp='，權杖不會過期';
+      else if(t){const days=(t*1000-Date.now())/864e5;const dt=new Date(t*1000);const ds=dt.getFullYear()+'/'+(dt.getMonth()+1)+'/'+dt.getDate();
+        exp=days<1?`。<strong>注意：這是短效權杖，大約 ${Math.max(1,Math.round(days*24*60))} 分鐘後過期</strong>，請照下方說明延長成 60 天版本`:`，權杖 ${ds} 到期（剩 ${Math.round(days)} 天）`}
+    }catch(e){}
+    igStatus(`連線成功：@${esc(IG_ME.username)}${exp}。`,exp.includes('注意')?'bad':'ok');
+    document.getElementById('ig-go').disabled=false;
+  }catch(e){igStatus(esc(e.network?'無法連到 Instagram，請確認網路，或改用 GitHub Pages 上的網址開啟這個系統。':e.message),'bad')}
+}
+async function igFetch(){
+  const out=document.getElementById('ig-out');
+  if(!IG_ME){toast('請先按「連線」');return}
+  const handles=parseIgHandles(document.getElementById('ig-list').value).slice(0,50);
+  if(!handles.length){toast('請輸入至少一個 IG 帳號');return}
+  const words=splitTags(document.getElementById('ig-words').value);
+  const negs=splitTags(document.getElementById('ig-negs').value);
+  const label=document.getElementById('ig-label').value.trim()||words[0]||'Instagram';
+  const female=clamp(parseFloat(document.getElementById('ig-female').value)||50);
+  const age=document.getElementById('ig-age').value;
+  const negHit=t=>negs.some(n=>t.toLowerCase().includes(n.toLowerCase()));
+  const btn=document.getElementById('ig-go');btn.disabled=true;out.innerHTML='';
+  const prog=document.getElementById('ig-prog');
+  const setP=(t,f)=>{prog.innerHTML=esc(t)+(f!=null?`<div class="bar"><span style="width:${(f*100).toFixed(0)}%"></span></div>`:'')};
+  const found=[];igExcluded=[];
+  try{
+    for(let i=0;i<handles.length;i++){
+      const h=handles[i];setP(`抓取 @${h}（${i+1}/${handles.length}）`,i/handles.length);
+      let bd;
+      try{
+        const r=await igGet(IG_ME.id,{fields:`business_discovery.username(${h}){username,name,biography,followers_count,media_count,media.limit(12){caption,like_count,comments_count,view_count,media_type,timestamp}}`});
+        bd=r.business_discovery;
+      }catch(e){
+        if(e.expired||e.rate||e.network)throw e;
+        igExcluded.push([h,'找不到帳號，或不是商業／創作者帳號']);continue;
+      }
+      const media=(bd.media&&bd.media.data)||[];
+      const name=bd.name||bd.username,bio=bd.biography||'';
+      if(!media.length){igExcluded.push([name,'沒有公開貼文']);continue}
+      const posts=media.map(m=>({title:m.caption||'',tags:[],desc:'',likes:m.like_count,comments:m.comments_count,views:m.view_count,time:m.timestamp?new Date(m.timestamp.replace(/\+0000$/,'Z')):null}));
+      if(isSimplified(posts.map(p=>p.title).join(' ')+bio)){igExcluded.push([name,'以簡體中文為主']);continue}
+      if(negs.length&&negHit(name+' '+bio)){igExcluded.push([name,'名稱或簡介含排除詞']);continue}
+      const frac=f=>posts.filter(f).length/posts.length;
+      if(negs.length&&frac(p=>negHit(p.title))>=.3){igExcluded.push([name,'近期貼文常出現排除詞']);continue}
+      let share=null;
+      if(words.length){
+        share=frac(p=>words.some(w=>p.title.toLowerCase().includes(w.toLowerCase()))&&!(negs.length&&negHit(p.title)));
+        if(share<.25&&!words.some(w=>(name+' '+bio).toLowerCase().includes(w.toLowerCase()))){igExcluded.push([name,'近期貼文提到相關詞的比例太低']);continue}
+      }
+      const avgOf=a=>{a=a.filter(x=>x!=null);return a.length?Math.round(a.reduce((s,x)=>s+x,0)/a.length):null};
+      const likes=avgOf(posts.map(p=>p.likes)),comments=avgOf(posts.map(p=>p.comments)),views=avgOf(posts.map(p=>p.views));
+      const estViews=views==null;
+      const now=Date.now();
+      const f=bd.followers_count||0;
+      const k={id:'g'+uid(),name,handle:bd.username,platform:'IG',category:label,tags:extractTags(posts,words,bd.username,[]),
+        followers:f,avg_views:estViews?(likes||0)*10:views,avg_likes:likes||0,avg_comments:comments||0,
+        posts_30d:posts.filter(p=>p.time&&now-p.time<=30*864e5).length,growth_30d:0,
+        price:estimatePriceIG(f),female_pct:female,main_age:age,
+        source:`Instagram API ${today()}（報價與受眾為估計${estViews?'，觀看數以按讚 ×10 估計':''}）`};
+      found.push({k,share,estViews});
+    }
+    const rmKeys=new Set(state.removed.map(r=>r.key));
+    igResults=found.map(r=>({...r,removed:rmKeys.has(kolKey(r.k)),exists:state.kols.some(x=>kolKey(x)===kolKey(r.k))}));
+    setP(`完成：抓到 ${igResults.length} 位，排除 ${igExcluded.length} 個帳號。`,1);
+    renderIgResults();
+  }catch(e){
+    setP('');
+    out.innerHTML=`<div class="empty"><p>${esc(e.network?'無法連到 Instagram。':e.message)}</p></div>`;
+    if(e.expired){IG_ME=null;igStatus('權杖已過期，請重新產生後貼上，再按「連線」。','bad')}
+  }finally{btn.disabled=!IG_ME}
+}
+function renderIgResults(){
+  const out=document.getElementById('ig-out');
+  const groups={};igExcluded.forEach(([t,w])=>(groups[w]=groups[w]||[]).push(t));
+  const exHtml=igExcluded.length?`<details style="margin-top:14px"><summary class="hint" style="cursor:pointer">已排除 ${igExcluded.length} 個帳號（點開看原因）</summary><ul class="ex">${Object.entries(groups).sort((a,b)=>b[1].length-a[1].length).map(([w,n])=>`<li>${esc(w)}：${n.slice(0,6).map(x=>esc(x)).join('、')}${n.length>6?` 等 ${n.length} 個`:''}</li>`).join('')}</ul></details>`:'';
+  if(!igResults.length){out.innerHTML=`<div class="empty"><p>沒有可加入的帳號。</p></div>${exHtml}`;return}
+  out.innerHTML=`<div class="panel"><div class="inline" style="justify-content:space-between"><h3 style="margin:0">抓取結果</h3>
+    <div class="inline"><button class="btn small" id="ig-all">全選</button><button class="btn primary" id="ig-add">加入勾選的 KOL</button></div></div>
+    <div class="scroll" style="margin-top:10px"><table class="t"><tr><th class="ck"></th><th>帳號</th><th class="n">粉絲</th><th class="n">平均觀看</th><th class="n">平均按讚</th><th class="n">內容相關</th><th class="n">估計報價</th><th>標籤</th></tr>
+    ${igResults.map((r,i)=>`<tr><td class="ck"><input type="checkbox" data-gi="${i}" ${r.removed?'':'checked'} aria-label="選取 ${esc(r.k.name)}"></td>
+      <td><strong>${esc(r.k.name)}</strong>${r.exists?' <span class="tag">已在資料中，會更新</span>':''}${r.removed?' <span class="risk mid">曾被刪除</span>':''}<br><a class="hint" href="https://www.instagram.com/${encodeURIComponent(r.k.handle)}/" target="_blank" rel="noopener">@${esc(r.k.handle)}</a></td>
+      <td class="n">${fmtW(r.k.followers)}</td><td class="n">${fmtW(r.k.avg_views)}${r.estViews?'<span class="hint">*</span>':''}</td><td class="n">${fmtW(r.k.avg_likes)}</td>
+      <td class="n">${r.share==null?'—':pct(r.share,0)}</td><td class="n">NT$${fmt(r.k.price)}</td>
+      <td><span class="tags">${r.k.tags.slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</span></td></tr>`).join('')}
+    </table></div>${igResults.some(r=>r.estViews)?'<p class="note">* 近期貼文都是圖片、沒有觀看數，以平均按讚 × 10 估計。</p>':''}${exHtml}</div>`;
+  document.getElementById('ig-all').onclick=()=>out.querySelectorAll('[data-gi]').forEach(c=>c.checked=true);
+  document.getElementById('ig-add').onclick=()=>{
+    const pick=[...out.querySelectorAll('[data-gi]:checked')].map(c=>igResults[+c.dataset.gi]);
+    if(!pick.length){toast('沒有勾選任何帳號');return}
+    let added=0,updated=0;
+    pick.forEach(r=>{
+      const key=kolKey(r.k);state.removed=state.removed.filter(x=>x.key!==key);
+      const i=state.kols.findIndex(x=>kolKey(x)===key);
+      if(i>=0){r.k.id=state.kols[i].id;state.kols[i]=r.k;updated++}else{state.kols.push(r.k);added++}
+      r.exists=true;r.removed=false;
+    });
+    persist();renderAll();renderIgResults();
+    toast(`已加入 ${added} 位、更新 ${updated} 位，到「推薦組合」就能用`);
+  };
+}
+function sendHandlesToIg(handles,label,words,negs){
+  const ta=document.getElementById('ig-list');
+  const cur=parseIgHandles(ta.value);handles.forEach(h=>{if(!cur.includes(h))cur.push(h)});
+  ta.value=cur.join('\n');
+  if(label&&!document.getElementById('ig-label').value)document.getElementById('ig-label').value=label;
+  if(words&&!document.getElementById('ig-words').value)document.getElementById('ig-words').value=words;
+  if(negs&&!document.getElementById('ig-negs').value)document.getElementById('ig-negs').value=negs;
+  location.hash='#instagram';
+  toast(`已帶入 ${handles.length} 個 IG 帳號，按「連線」後再按「抓取」`);
+}
+document.getElementById('ig-connect').onclick=igConnect;
+document.getElementById('ig-go').onclick=igFetch;
+bindRemember('yt','yt-key','yt-remember');
+bindRemember('ig','ig-token','ig-remember');
+
+const VIEWS=['recommend','ranking','review','youtube','instagram','data'];
 function route(){
   const v=VIEWS.includes(location.hash.slice(1))?location.hash.slice(1):'recommend';
   VIEWS.forEach(x=>{document.getElementById('view-'+x).hidden=x!==v});
