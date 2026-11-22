@@ -351,7 +351,11 @@ table.t td.ck,table.t th.ck{width:32px}
         <div><label for="ig-label">分類名稱</label><input id="ig-label" type="text" placeholder="留空 = 第一個相關詞"></div>
         <div><label for="ig-female">受眾女性比例估計（%）</label><input id="ig-female" type="number" min="0" max="100" value="50"></div>
         <div><label for="ig-age">主要受眾年齡</label><select id="ig-age"><option>18-24</option><option selected>25-34</option><option>35-44</option><option>45+</option></select></div>
+        <div><label for="ig-minf">粉絲數下限</label><input id="ig-minf" type="number" min="0" step="1000" value="5000"></div>
+        <div><label for="ig-maxf">粉絲數上限（可留空）</label><input id="ig-maxf" type="number" min="0" step="10000" placeholder="不限"></div>
+        <div><label class="inline" style="margin-top:26px;font-size:14px;color:var(--ink)"><input type="checkbox" id="ig-tw" checked>只要台灣創作者</label></div>
       </div>
+      <p class="hint" style="margin-top:8px">粉絲數和地區條件會套用在 AI 推薦和擴散找人；你自己貼的清單不會被刪掉，只會標記並取消勾選。</p>
       <div class="inline" style="margin-top:14px"><button class="btn primary" id="ig-go" disabled>抓取清單上的帳號</button><span class="hint">一次最多 50 個帳號。只能查商業或創作者帳號。</span></div>
       <div class="panel" style="margin-top:14px;background:var(--sunk);border:0">
         <h3 style="margin-bottom:4px">找更多人：拉出種子標註過的所有帳號，並自動分類</h3>
@@ -1255,7 +1259,24 @@ function igCtx(){
   const negs=splitTags(document.getElementById('ig-negs').value);
   return {words,negs,label:document.getElementById('ig-label').value.trim()||words[0]||'Instagram',
     female:clamp(parseFloat(document.getElementById('ig-female').value)||50),age:document.getElementById('ig-age').value,
-    negHit:t=>negs.some(n=>t.toLowerCase().includes(n.toLowerCase()))};
+    negHit:t=>negs.some(n=>t.toLowerCase().includes(n.toLowerCase())),
+    minF:Math.max(0,parseInt(document.getElementById('ig-minf').value)||0),maxF:parseInt(document.getElementById('ig-maxf').value)||0,
+    twOnly:document.getElementById('ig-tw').checked};
+}
+/* 判斷帳號是不是台灣創作者：看文字的語言與地名 */
+function igRegion(text){
+  const t=String(text||'');
+  const kana=(t.match(/[\u3040-\u30ff]/g)||[]).length,hangul=(t.match(/[\uac00-\ud7af]/g)||[]).length,thai=(t.match(/[\u0e00-\u0e7f]/g)||[]).length;
+  const cjk=(t.match(/[\u4e00-\u9fff]/g)||[]).length,latin=(t.match(/[A-Za-z]/g)||[]).length;
+  const twCue=/台灣|臺灣|台北|臺北|新北|桃園|台中|臺中|台南|臺南|高雄|新竹|基隆|宜蘭|花蓮|台東|屏東|嘉義|彰化|雲林|苗栗|南投|澎湖|金門|🇹🇼|taiwan|taipei|kaohsiung|taichung/i.test(t);
+  const hk=(t.match(/嘅|咗|唔|係咪|佢哋|喺|冇|啲|乜嘢|香港|hong ?kong/gi)||[]).length;
+  if(kana>=8&&kana>cjk*.2)return {bad:'看起來是日本創作者'};
+  if(hangul>=8)return {bad:'看起來是韓國創作者'};
+  if(thai>=8)return {bad:'看起來是泰國創作者'};
+  if(isSimplified(t))return {bad:'以簡體中文為主'};
+  if(hk>=3&&!twCue)return {bad:'看起來是香港創作者'};
+  if(cjk<15&&latin>60&&!twCue)return {bad:'貼文幾乎沒有中文，可能不是台灣創作者'};
+  return {bad:null,tw:twCue};
 }
 async function igRaw(h,limit){
   try{
@@ -1298,6 +1319,11 @@ function igEvaluate(bd,ctx){
   if(!media.length)return {ex:[name,'沒有公開貼文']};
   const posts=media.map(m=>({title:m.caption||'',tags:[],desc:'',likes:m.like_count,comments:m.comments_count,views:m.view_count,time:m.timestamp?new Date(m.timestamp.replace(/\+0000$/,'Z')):null}));
   if(isSimplified(posts.map(p=>p.title).join(' ')+bio))return {ex:[name,'以簡體中文為主']};
+  const fc=bd.followers_count||0,flags=[];
+  if(ctx.minF&&fc<ctx.minF)flags.push(`粉絲數 ${fmt(fc)}，低於下限`);
+  if(ctx.maxF&&fc>ctx.maxF)flags.push(`粉絲數 ${fmtW(fc)}，高於上限`);
+  if(ctx.twOnly){const rg=igRegion(name+'\n'+bio+'\n'+posts.map(p=>p.title).join('\n'));if(rg.bad)flags.push(rg.bad)}
+  if(flags.length&&ctx.hard)return {ex:[name,flags[0].replace(/粉絲數 [\d,.萬]+，/,'粉絲數')]};
   if(negs.length&&negHit(name+' '+bio))return {ex:[name,'名稱或簡介含排除詞']};
   if(NOT_KOL.test(name)&&!NOT_KOL.test(ctx.words.join(' ')))return {ex:[name,'官方／媒體／機構帳號']};
   const frac=f=>posts.filter(f).length/posts.length;
@@ -1318,7 +1344,11 @@ function igEvaluate(bd,ctx){
     price:estimatePriceIG(f),female_pct:ctx.female,main_age:ctx.age,
     source:`Instagram API ${today()}（報價與受眾為估計${estViews?'，觀看數以按讚 ×10 估計':''}）`};
   if(auto&&auto!=='其他／未分類'&&!k.tags.includes(auto))k.tags.unshift(auto);
-  return {ok:{k,share,estViews,low:!!low,raw:{bio,caps:posts.map(p=>p.title)}}};
+  return {ok:{k,share,estViews,low:!!low,flags,raw:{bio,caps:posts.map(p=>p.title)}}};
+}
+function igApplyAiRegion(found,ctx){
+  if(!ctx.twOnly)return;
+  for(let i=found.length-1;i>=0;i--){const r=found[i];if(r.notTW){if(ctx.hard){igExcluded.push([r.k.name,'AI 判斷不是台灣創作者'+(r.notTW!==true?`（${r.notTW}）`:'')]);found.splice(i,1)}else r.flags=(r.flags||[]).concat(['AI 判斷不是台灣創作者'])}}
 }
 function igProg(t,f){document.getElementById('ig-prog').innerHTML=esc(t)+(f!=null?`<div class="bar"><span style="width:${(f*100).toFixed(0)}%"></span></div>`:'')}
 function igFinish(found,mode,extra){
@@ -1340,7 +1370,7 @@ async function igFetch(opts){
   if(!IG_ME){toast('請先按「連線」');return}
   const handles=parseIgHandles(document.getElementById('ig-list').value).slice(0,50);
   if(!handles.length){toast('請輸入至少一個 IG 帳號');return}
-  const ctx={...igCtx(),strict:false,auto:!document.getElementById('ig-label').value.trim()};igBusy(true);document.getElementById('ig-out').innerHTML='';
+  const ctx={...igCtx(),strict:false,auto:!document.getElementById('ig-label').value.trim(),hard:!!o.aiNeed};igBusy(true);document.getElementById('ig-out').innerHTML='';
   const found=[];igExcluded=[];
   try{
     for(let i=0;i<handles.length;i++){
@@ -1353,6 +1383,7 @@ async function igFetch(opts){
     }
     if(o.aiReasons)found.forEach(r=>{const why=o.aiReasons[r.k.handle.toLowerCase()];if(why)r.aiReason=why});
     await gmEnrich(found,o.aiNeed||document.getElementById('gm-need').value.trim()||ctx.words.join('、'));
+    igApplyAiRegion(found,ctx);
     igFinish(found,o.aiNeed?'ai':'fetch');
   }catch(e){igFail(e)}finally{igBusy(false)}
 }
@@ -1361,7 +1392,7 @@ async function igSnowball(){
   if(!IG_ME){toast('請先按「連線」');return}
   const seeds=parseIgHandles(document.getElementById('ig-list').value).slice(0,15);
   if(!seeds.length){toast('請先在清單放幾個種子帳號');return}
-  const ctx={...igCtx(),strict:false,auto:true};
+  const ctx={...igCtx(),strict:false,auto:true,hard:true};
   const maxCand=Math.max(5,Math.min(60,parseInt(document.getElementById('ig-max').value)||30));
   igBusy(true);document.getElementById('ig-out').innerHTML='';igExcluded=[];
   const known=new Set([...seeds,...state.kols.filter(k=>k.platform==='IG').map(k=>String(k.handle).toLowerCase())]);
@@ -1405,6 +1436,7 @@ async function igSnowball(){
       r.ok.by=[...by];found.push(r.ok);
     }
     await gmEnrich(found,document.getElementById('gm-need').value.trim()||ctx.words.join('、'));
+    igApplyAiRegion(found,ctx);
     const catN={};found.forEach(r=>catN[r.k.category]=(catN[r.k.category]||0)+1);
     found.sort((a,b)=>((a.k.category==='其他／未分類')-(b.k.category==='其他／未分類'))||(catN[b.k.category]-catN[a.k.category])||a.k.category.localeCompare(b.k.category)||(a.low-b.low)||(b.by.length-a.by.length)||(b.k.followers-a.k.followers));
     igFinish(found,'snow',`完成：讀了 ${seedsOk} 個種子共 ${postsRead} 篇貼文，找到 ${total} 個被標註的帳號，檢查了 ${cands.length} 個，${found.length} 位是創作者${total>cands.length?`（還有 ${total-cands.length} 個沒檢查，可以調高上限再跑一次）`:''}。`);
@@ -1418,10 +1450,10 @@ function renderIgResults(){
   out.innerHTML=`<div class="panel"><div class="inline" style="justify-content:space-between"><h3 style="margin:0">抓取結果</h3>
     <div class="inline"><button class="btn small" id="ig-all">全選</button><button class="btn primary" id="ig-add">加入勾選的 KOL</button></div></div>
     <div class="scroll" style="margin-top:10px"><table class="t"><tr><th class="ck"></th><th>帳號</th><th class="n">粉絲</th><th class="n">平均觀看</th><th class="n">平均按讚</th><th class="n">內容相關</th><th class="n">估計報價</th><th>分類</th><th>標籤</th>${igMode==='snow'?'<th>被誰標註</th>':''}</tr>
-    ${igResults.map((r,i)=>`<tr><td class="ck"><input type="checkbox" data-gi="${i}" ${r.removed||r.low||r.brand?'':'checked'} aria-label="選取 ${esc(r.k.name)}"></td>
+    ${igResults.map((r,i)=>`<tr><td class="ck"><input type="checkbox" data-gi="${i}" ${r.removed||r.low||r.brand||(r.flags&&r.flags.length)?'':'checked'} aria-label="選取 ${esc(r.k.name)}"></td>
       <td><strong>${esc(r.k.name)}</strong>${r.exists?' <span class="tag">已在資料中，會更新</span>':''}${r.removed?' <span class="risk mid">曾被刪除</span>':''}<br><a class="hint" href="https://www.instagram.com/${encodeURIComponent(r.k.handle)}/" target="_blank" rel="noopener">@${esc(r.k.handle)}</a>${r.aiNote||r.aiReason?`<br><span class="hint" style="white-space:normal;display:inline-block;max-width:260px">${esc(r.aiNote||r.aiReason)}</span>`:''}</td>
       <td class="n">${fmtW(r.k.followers)}</td><td class="n">${fmtW(r.k.avg_views)}${r.estViews?'<span class="hint">*</span>':''}</td><td class="n">${fmtW(r.k.avg_likes)}</td>
-      <td class="n">${r.aiRel!=null?`AI ${r.aiRel}`:r.share==null?'—':pct(r.share,0)}${r.low?'<br><span class="risk mid">相關度低</span>':''}</td><td class="n">NT$${fmt(r.k.price)}</td><td><span class="tag hit">${esc(r.k.category)}</span>${r.brand?'<br><span class="risk mid">疑似品牌／店家</span>':''}</td>
+      <td class="n">${r.aiRel!=null?`AI ${r.aiRel}`:r.share==null?'—':pct(r.share,0)}${r.low?'<br><span class="risk mid">相關度低</span>':''}</td><td class="n">NT$${fmt(r.k.price)}</td><td><span class="tag hit">${esc(r.k.category)}</span>${r.brand?'<br><span class="risk mid">疑似品牌／店家</span>':''}${(r.flags||[]).map(f=>`<br><span class="risk mid">${esc(f)}</span>`).join('')}</td>
       <td><span class="tags">${r.k.tags.slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</span></td>${igMode==='snow'?`<td class="hint">${(r.by||[]).length} 位：${(r.by||[]).slice(0,3).map(x=>'@'+esc(x)).join('、')}${(r.by||[]).length>3?' 等':''}</td>`:''}</tr>`).join('')}
     </table></div>${igMode==='snow'?'<div class="inline" style="margin-top:12px"><button class="btn" id="ig-seed">把勾選的帳號加進清單，當下一輪種子</button></div>':''}${igResults.some(r=>r.low)?'<p class="note">標「相關度低」的帳號，近期貼文很少直接寫到你的相關詞，所以預設不勾選。如果你確定要找他，自己勾起來就好；也可以換更具體的相關詞，例如把「生活」改成「日常、vlog、家庭、穿搭」。</p>':''}${igResults.some(r=>r.estViews)?'<p class="note">* 近期貼文都是圖片、沒有觀看數，以平均按讚 × 10 估計。</p>':''}${exHtml}</div>`;
   document.getElementById('ig-all').onclick=()=>out.querySelectorAll('[data-gi]').forEach(c=>c.checked=true);
@@ -1526,9 +1558,10 @@ async function gmRecommend(){
   try{
     const prompt=`你是台灣網紅行銷的研究助理。請依照需求，列出 ${n} 個符合的 Instagram 創作者帳號。
 需求：${need}
+${(()=>{const c=igCtx();return [c.twOnly?'- 必須是台灣的創作者（以台灣觀眾為主、用繁體中文發文），不要香港、中國、日本、韓國或其他國家的帳號。':'',c.minF?`- 粉絲數大約 ${c.minF.toLocaleString()} 以上${c.maxF?`、${c.maxF.toLocaleString()} 以下`:''}。不要粉絲很少的個人帳號。`:'']})().filter(Boolean).join('\n')}
 規則：
 - 只列「個人創作者／網紅／KOL」，不要品牌、店家、公司、媒體、政府或官方帳號。
-- 只列你有把握 Instagram 帳號名稱正確、而且近年仍在經營的人；不確定帳號名稱就不要列，寧可少列。
+- 優先列有一定知名度、你很確定帳號名稱的人；只列你有把握 Instagram 帳號名稱正確、而且近年仍在經營的人；不確定帳號名稱就不要列，寧可少列。
 - 不要重複列出這些已經有的帳號：${have.join(', ')||'（無）'}
 只輸出 JSON 陣列，不要其他文字，格式：[{"username":"IG 帳號名稱（不含 @）","name":"顯示名稱","reason":"一句話說明為什麼符合需求"}]`;
     const list=await gmAsk(prompt);
@@ -1558,8 +1591,9 @@ async function gmEnrich(found,need){
 2. tags：3 到 5 個描述內容的繁體中文短標籤
 3. is_brand：是否為公司、品牌、店家、媒體或機構帳號（true/false）；個人創作者即使常接業配也算 false
 4. relevance：${need?`跟這個需求的相關程度 0 到 100：「${need}」`:'固定填 null'}
-5. note：一句話描述這位創作者
-只輸出 JSON 陣列，不要其他文字：[{"username":"","category":"","tags":[],"is_brand":false,"relevance":null,"note":""}]
+5. is_taiwan：是否為台灣創作者（看語言、地名、內容判斷；繁體中文但明顯是香港、或是中國、日本、韓國等地的帳號填 false），無法判斷填 null
+6. note：一句話描述這位創作者
+只輸出 JSON 陣列，不要其他文字：[{"username":"","category":"","tags":[],"is_brand":false,"relevance":null,"is_taiwan":null,"note":""}]
 帳號資料：${JSON.stringify(items)}`;
     try{
       const res=await gmAsk(prompt);
@@ -1570,6 +1604,7 @@ async function gmEnrich(found,need){
         r.brand=x.is_brand===true?'AI 判斷為品牌／店家':(r.brand&&x.is_brand===false?null:r.brand);
         if(need&&typeof x.relevance==='number'){r.aiRel=x.relevance;r.low=x.relevance<40}
         if(x.note)r.aiNote=String(x.note).slice(0,60);
+        if(x.is_taiwan===false)r.notTW=true;
         r.ai=true;done++;
       });
     }catch(e){igProg(`AI 分類中斷：${e.message}（已完成的部分會保留）`);break}
