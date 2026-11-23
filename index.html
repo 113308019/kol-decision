@@ -351,7 +351,7 @@ table.t td.ck,table.t th.ck{width:32px}
         <div><label for="ig-label">分類名稱</label><input id="ig-label" type="text" placeholder="留空 = 第一個相關詞"></div>
         <div><label for="ig-female">受眾女性比例估計（%）</label><input id="ig-female" type="number" min="0" max="100" value="50"></div>
         <div><label for="ig-age">主要受眾年齡</label><select id="ig-age"><option>18-24</option><option selected>25-34</option><option>35-44</option><option>45+</option></select></div>
-        <div><label for="ig-minf">粉絲數下限</label><input id="ig-minf" type="number" min="0" step="1000" value="5000"></div>
+        <div><label for="ig-minf">粉絲數下限</label><input id="ig-minf" type="number" min="0" step="1000" value="10000"></div>
         <div><label for="ig-maxf">粉絲數上限（可留空）</label><input id="ig-maxf" type="number" min="0" step="10000" placeholder="不限"></div>
         <div><label class="inline" style="margin-top:26px;font-size:14px;color:var(--ink)"><input type="checkbox" id="ig-tw" checked>只要台灣創作者</label></div>
       </div>
@@ -1384,6 +1384,7 @@ async function igFetch(opts){
     if(o.aiReasons)found.forEach(r=>{const why=o.aiReasons[r.k.handle.toLowerCase()];if(why)r.aiReason=why});
     await gmEnrich(found,o.aiNeed||document.getElementById('gm-need').value.trim()||ctx.words.join('、'));
     igApplyAiRegion(found,ctx);
+    if(o.aiNeed)found.sort((a,b)=>b.k.followers-a.k.followers);
     igFinish(found,o.aiNeed?'ai':'fetch');
   }catch(e){igFail(e)}finally{igBusy(false)}
 }
@@ -1561,7 +1562,8 @@ async function gmRecommend(){
 ${(()=>{const c=igCtx();return [c.twOnly?'- 必須是台灣的創作者（以台灣觀眾為主、用繁體中文發文），不要香港、中國、日本、韓國或其他國家的帳號。':'',c.minF?`- 粉絲數大約 ${c.minF.toLocaleString()} 以上${c.maxF?`、${c.maxF.toLocaleString()} 以下`:''}。不要粉絲很少的個人帳號。`:'']})().filter(Boolean).join('\n')}
 規則：
 - 只列「個人創作者／網紅／KOL」，不要品牌、店家、公司、媒體、政府或官方帳號。
-- 優先列有一定知名度、你很確定帳號名稱的人；只列你有把握 Instagram 帳號名稱正確、而且近年仍在經營的人；不確定帳號名稱就不要列，寧可少列。
+- 從最知名、粉絲最多的人開始列（例如有藍勾勾認證、上過媒體、常接品牌合作的網紅），由知名度高到低排序；不要列一般素人或小帳號。
+- 優先列你很確定帳號名稱的人；只列你有把握 Instagram 帳號名稱正確、而且近年仍在經營的人；不確定帳號名稱就不要列，寧可少列。
 - 不要重複列出這些已經有的帳號：${have.join(', ')||'（無）'}
 只輸出 JSON 陣列，不要其他文字，格式：[{"username":"IG 帳號名稱（不含 @）","name":"顯示名稱","reason":"一句話說明為什麼符合需求"}]`;
     const list=await gmAsk(prompt);
