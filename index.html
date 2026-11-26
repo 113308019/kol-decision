@@ -340,7 +340,7 @@ table.t td.ck,table.t th.ck{width:32px}
       <div class="inline" style="margin-top:12px"><button class="btn primary" id="gm-go" disabled>AI 推薦候選人並驗證</button>
         <label class="inline" style="font-size:14px"><input type="checkbox" id="gm-auto" checked>抓取和擴散後，用 AI 分類與判斷品牌</label></div>
       <div class="msg" id="gm-msg" role="status"></div>
-      <p class="note">AI 只能根據它原本知道的資料推薦，很新或很小的創作者它可能不知道，也可能記錯帳號；記錯的帳號會在 Instagram 驗證時被排除，不會混進資料。</p>
+      <p class="note">流程：AI 只提名「人」，帳號依序從候選人資料庫、Wikidata 查證，都查不到才用 AI 推測並核對名字，結果會標出來源。你勾選加入的創作者會自動存進候選人資料庫，系統越用越準。AI 只能根據它原本知道的資料推薦，很新或很小的創作者它可能不知道，也可能記錯帳號；記錯的帳號會在 Instagram 驗證時被排除，不會混進資料。</p>
     </div>
     <div class="panel" style="margin-top:16px">
       <h3>2. 要查詢的帳號</h3>
@@ -530,6 +530,7 @@ function applyState(s){
   if(s.brief&&!s.brief.keywords&&s.brief.category)state.brief.keywords=(CAT_TAGS[s.brief.category]||[s.brief.category]).slice(0,2).join('、');
   delete state.brief.category;
   if(!Array.isArray(state.removed))state.removed=[];
+  if(!state.poolExtra||typeof state.poolExtra!=='object')state.poolExtra={};
 }
 try{const raw=localStorage.getItem(LS_KEY);if(raw)applyState(JSON.parse(raw))}catch(e){}
 let remoteRef=null,saving=false,pendingSave=false,saveTimer;
@@ -1259,14 +1260,48 @@ async function igConnect(){
   }catch(e){igStatus(esc(e.network?'無法連到 Instagram，請確認網路，或改用 GitHub Pages 上的網址開啟這個系統。':e.message),'bad')}
 }
 const IG_POOL={"健身": ["mattcabfitness", "jharxx", "chingkunlin", "uooqer", "chu124_", "conni3wu", "_tao.190.tao_", "guo_017", "tedy_dddd", "angelina.liuu", "coco__0531", "jessicababyfat", "ashlee_xiu", "candice_sweatlife", "may8572fit", "melody.wan", "hannah_lovelife"], "美食": ["77.food", "thisiskenyoung", "wangfulichef", "aaaron1023", "smallhandcook", "7_food_020291", "missjoey__food", "bichon_poodle", "maylifestyle04_", "chen__roro", "be11e.food", "eden_0522", "traveggo", "bgirl_anlei", "cutemo.love.disney", "eat.1025", "solo_guide", "jk__foodie", "foodieyaya", "neru.foodie"], "旅遊": ["yuting._.1108", "meimeeiiiiiiii", "gracetseng_0821", "witandfolly", "madvnz", "ygt1016", "bb211019", "annyu_liao", "golden___trip", "tai_chi___", "charmianchen", "ninawayliu", "qiuung", "alexhuang1221", "jaydenpax", "xtrachicha", "cathy2wildddd", "g_______v_______g"], "爬山": ["hiimpoca", "chris.in.taiwan", "cathy2wildddd", "omgitsunny", "alexhuang1221", "ninawayliu", "hersh__man", "zonaaa_____", "andrina_wild"], "遊戲": ["joemanweng", "sandykaka_", "xu_m1d", "miao11255", "angel20739", "senyeyezi", "asukachan0613", "a227795", "bimay_nagging", "lingjiepan", "6tan"], "音樂": ["nickthereal4sho", "yogalin_official", "foolandidiot_official", "waynes_so_sad", "momanddad_band", "lynnemusicke", "justice_0611", "michaelpao0324", "djrara0626", "bboychoco", "bboybojin", "cutesww0125", "tingyuoo", "shinyyyq", "jouyangshiu"], "籃球": ["blackielovelife", "jlin7"]};
+/* 候選人資料庫 = 內建 + 使用者驗證通過後加入的（存在 state.poolExtra，會同步） */
+function poolAll(){
+  const out={};
+  Object.entries(IG_POOL).forEach(([k,v])=>out[k]=[...v]);
+  Object.entries(state.poolExtra||{}).forEach(([k,v])=>{out[k]=out[k]||[];v.forEach(h=>{if(!out[k].includes(h))out[k].push(h)})});
+  return out;
+}
+function poolHas(h){h=String(h||'').toLowerCase();return Object.values(poolAll()).some(v=>v.includes(h))}
+function poolLearn(list){
+  state.poolExtra=state.poolExtra||{};let n=0;
+  list.forEach(({cat,h})=>{h=String(h).toLowerCase();if(!cat||poolHas(h))return;(state.poolExtra[cat]=state.poolExtra[cat]||[]).push(h);n++});
+  if(n)igPoolRender();
+  return n;
+}
+function igPoolRender(){
+  const sel=document.getElementById('ig-pool'),cur=sel.value,all=poolAll();
+  sel.innerHTML=Object.entries(all).map(([k,v])=>{const ex=((state.poolExtra||{})[k]||[]).length;return `<option value="${esc(k)}">${esc(k)}（${v.length}${ex?`，含新增 ${ex}`:''}）</option>`}).join('');
+  if(cur&&all[cur])sel.value=cur;
+}
 function igPoolInit(){
   const sel=document.getElementById('ig-pool');
-  sel.innerHTML=Object.entries(IG_POOL).map(([k,v])=>`<option value="${esc(k)}">${esc(k)}（${v.length}）</option>`).join('');
+  igPoolRender();
+  if(0)sel.innerHTML=Object.entries(IG_POOL).map(([k,v])=>`<option value="${esc(k)}">${esc(k)}（${v.length}）</option>`).join('');
   document.getElementById('ig-pool-load').onclick=()=>{
-    const k=sel.value,ta=document.getElementById('ig-list');
-    ta.value=IG_POOL[k].join('\n');document.getElementById('ig-label').value=k;
-    toast(`已載入「${k}」${IG_POOL[k].length} 個帳號，按「抓取清單上的帳號」`);
+    const k=sel.value,ta=document.getElementById('ig-list'),all=poolAll();
+    ta.value=all[k].join('\n');document.getElementById('ig-label').value=k;
+    toast(`已載入「${k}」${all[k].length} 個帳號，按「抓取清單上的帳號」`);
   };
+}
+/* Wikidata：用人名查公開登記的 Instagram 帳號（屬性 P2003），免費、可從網頁直接呼叫 */
+async function wikidataIG(names){
+  const uniq=[...new Set(names.map(n=>String(n||'').trim()).filter(n=>n.length>=2&&n.length<=40))].slice(0,60);
+  if(!uniq.length)return {};
+  const lit=n=>JSON.stringify(n);
+  const vals=uniq.map(n=>['zh','zh-tw','zh-hant','en'].map(l=>`${lit(n)}@${l}`).join(' ')).join(' ');
+  const q=`SELECT ?name ?ig WHERE { VALUES ?name { ${vals} } ?item rdfs:label|skos:altLabel ?name . ?item wdt:P2003 ?ig . } LIMIT 300`;
+  try{
+    const r=await fetch('https://query.wikidata.org/sparql?format=json&query='+encodeURIComponent(q),{headers:{Accept:'application/sparql-results+json'}});
+    const d=await r.json();const out={};
+    (d.results&&d.results.bindings||[]).forEach(b=>{const n=b.name.value,h=String(b.ig.value).toLowerCase().replace(/^@/,'');if(/^[a-z0-9._]{1,30}$/.test(h))(out[n]=out[n]||[]).includes(h)||(out[n]=out[n]||[]).push(h)});
+    return out;
+  }catch(e){return {}}
 }
 /* AI 說的人名跟實際帳號對不對得上：避免 AI 把網紅配到同名路人的帳號 */
 function nameMatches(claimed,bd){
@@ -1401,12 +1436,13 @@ async function igFetch(opts){
       const h=handles[i];igProg(`抓取 @${h}（${i+1}/${handles.length}）`,i/handles.length);
       const bd=await igRaw(h,12);
       if(!bd){igExcluded.push([h,'找不到帳號，或不是商業／創作者帳號']);continue}
-      if(o.aiNames&&!nameMatches(o.aiNames[h],bd)){igExcluded.push([`@${h}`,`跟 AI 說的人對不上（AI 說是「${o.aiNames[h]}」，實際是「${bd.name||bd.username}」）`]);continue}
+      if(o.aiNames&&o.aiNames[h]&&!nameMatches(o.aiNames[h],bd)){igExcluded.push([`@${h}`,`跟 AI 說的人對不上（AI 說是「${o.aiNames[h]}」，實際是「${bd.name||bd.username}」）`]);continue}
       const r=igEvaluate(bd,ctx);
       if(r.ex){igExcluded.push(r.ex);continue}
       r.ok.brand=looksLikeBrand(bd);found.push(r.ok);
     }
     if(o.aiReasons)found.forEach(r=>{const why=o.aiReasons[r.k.handle.toLowerCase()];if(why)r.aiReason=why});
+    found.forEach(r=>{const hl=r.k.handle.toLowerCase();r.src=(o.aiSrc&&o.aiSrc[hl])||(poolHas(hl)?'資料庫':'')});
     await gmEnrich(found,o.aiNeed||document.getElementById('gm-need').value.trim()||ctx.words.join('、'));
     igApplyAiRegion(found,ctx);
     if(o.aiNeed)found.sort((a,b)=>b.k.followers-a.k.followers);
@@ -1477,7 +1513,7 @@ function renderIgResults(){
     <div class="inline"><button class="btn small" id="ig-all">全選</button><button class="btn primary" id="ig-add">加入勾選的 KOL</button></div></div>
     <div class="scroll" style="margin-top:10px"><table class="t"><tr><th class="ck"></th><th>帳號</th><th class="n">粉絲</th><th class="n">平均觀看</th><th class="n">平均按讚</th><th class="n">內容相關</th><th class="n">估計報價</th><th>分類</th><th>標籤</th>${igMode==='snow'?'<th>被誰標註</th>':''}</tr>
     ${igResults.map((r,i)=>`<tr><td class="ck"><input type="checkbox" data-gi="${i}" ${r.removed||r.low||r.brand||(r.flags&&r.flags.length)?'':'checked'} aria-label="選取 ${esc(r.k.name)}"></td>
-      <td><strong>${esc(r.k.name)}</strong>${r.exists?' <span class="tag">已在資料中，會更新</span>':''}${r.removed?' <span class="risk mid">曾被刪除</span>':''}<br><a class="hint" href="https://www.instagram.com/${encodeURIComponent(r.k.handle)}/" target="_blank" rel="noopener">@${esc(r.k.handle)}</a>${r.aiNote||r.aiReason?`<br><span class="hint" style="white-space:normal;display:inline-block;max-width:260px">${esc(r.aiNote||r.aiReason)}</span>`:''}</td>
+      <td><strong>${esc(r.k.name)}</strong>${r.src?` <span class="${r.src==='AI 推測'?'risk mid':'tag hit'}">${esc(r.src)}</span>`:''}${r.exists?' <span class="tag">已在資料中，會更新</span>':''}${r.removed?' <span class="risk mid">曾被刪除</span>':''}<br><a class="hint" href="https://www.instagram.com/${encodeURIComponent(r.k.handle)}/" target="_blank" rel="noopener">@${esc(r.k.handle)}</a>${r.aiNote||r.aiReason?`<br><span class="hint" style="white-space:normal;display:inline-block;max-width:260px">${esc(r.aiNote||r.aiReason)}</span>`:''}</td>
       <td class="n">${fmtW(r.k.followers)}</td><td class="n">${fmtW(r.k.avg_views)}${r.estViews?'<span class="hint">*</span>':''}</td><td class="n">${fmtW(r.k.avg_likes)}</td>
       <td class="n">${r.aiRel!=null?`AI ${r.aiRel}`:r.share==null?'—':pct(r.share,0)}${r.low?'<br><span class="risk mid">相關度低</span>':''}</td><td class="n">NT$${fmt(r.k.price)}</td><td><span class="tag hit">${esc(r.k.category)}</span>${r.brand?'<br><span class="risk mid">疑似品牌／店家</span>':''}${(r.flags||[]).map(f=>`<br><span class="risk mid">${esc(f)}</span>`).join('')}</td>
       <td><span class="tags">${r.k.tags.slice(0,4).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</span></td>${igMode==='snow'?`<td class="hint">${(r.by||[]).length} 位：${(r.by||[]).slice(0,3).map(x=>'@'+esc(x)).join('、')}${(r.by||[]).length>3?' 等':''}</td>`:''}</tr>`).join('')}
@@ -1495,8 +1531,9 @@ function renderIgResults(){
       if(i>=0){r.k.id=state.kols[i].id;state.kols[i]=r.k;updated++}else{state.kols.push(r.k);added++}
       r.exists=true;r.removed=false;
     });
+    const learned=poolLearn(pick.filter(r=>!r.brand).map(r=>({cat:r.k.category&&r.k.category!=='其他／未分類'?r.k.category:'',h:r.k.handle})));
     persist();renderAll();renderIgResults();
-    toast(`已加入 ${added} 位、更新 ${updated} 位，到「推薦組合」就能用`);
+    toast(`已加入 ${added} 位、更新 ${updated} 位${learned?`，並把 ${learned} 個新帳號存進候選人資料庫`:''}`);
   };
 }
 function sendHandlesToIg(handles,label,words,negs){
@@ -1592,19 +1629,33 @@ ${(()=>{const c=igCtx();return [c.twOnly?'- 必須是台灣的創作者（以台
 - 優先列你很確定帳號名稱的人；只列你有把握 Instagram 帳號名稱正確、而且近年仍在經營的人；不確定帳號名稱就不要列，寧可少列。
 - 不要重複列出這些已經有的帳號：${have.join(', ')||'（無）'}
 - 下面是已經查證過的真實帳號資料庫，請「優先」從中挑出符合需求的人；資料庫裡不夠，才補充你非常確定的其他帳號：${JSON.stringify(IG_POOL)}
-- name 欄位請填這個人的真實姓名或常用藝名，系統會拿它核對帳號是否正確。
-只輸出 JSON 陣列，不要其他文字，格式：[{"username":"IG 帳號名稱（不含 @）","name":"顯示名稱","reason":"一句話說明為什麼符合需求"}]`;
+- name 欄位一定要填這個人的真實姓名或常用藝名（系統會用它去維基資料庫查證帳號，並核對帳號是否正確）。
+- username 不確定就留空字串，不要用猜的；系統會自己查。
+只輸出 JSON 陣列，不要其他文字，格式：[{"username":"IG 帳號名稱（不含 @），不確定就填空字串","name":"真實姓名或藝名","reason":"一句話說明為什麼符合需求"}]`;
     const list=await gmAsk(prompt);
-    gmSuggest=list.map(x=>({h:String(x.username||'').replace(/^@/,'').trim().toLowerCase(),name:x.name||'',reason:x.reason||''}))
-      .filter(x=>/^[a-z0-9._]{1,30}$/.test(x.h));
-    const seen=new Set();gmSuggest=gmSuggest.filter(x=>!seen.has(x.h)&&seen.add(x.h));
-    if(!gmSuggest.length){gmMsg('AI 沒有給出可用的帳號，換個說法再試一次。','bad');return}
-    gmMsg(`AI 提名了 ${gmSuggest.length} 個帳號，接著用 Instagram 驗證是否真的存在、是不是創作者…`,'ok');
+    let raw=list.map(x=>({h:String(x.username||'').replace(/^@/,'').trim().toLowerCase(),name:String(x.name||'').trim(),reason:x.reason||''}))
+      .filter(x=>x.name||/^[a-z0-9._]{1,30}$/.test(x.h));
+    if(!raw.length){gmMsg('AI 沒有給出可用的人選，換個說法再試一次。','bad');return}
+    gmMsg(`AI 提名了 ${raw.length} 位，正在用候選人資料庫和 Wikidata 查證帳號…`);
+    const wd=await wikidataIG(raw.filter(x=>!(x.h&&poolHas(x.h))).map(x=>x.name));
+    gmSuggest=[];const seen=new Set();let noHandle=[];
+    raw.forEach(x=>{
+      let h='',src='';
+      if(x.h&&poolHas(x.h)){h=x.h;src='資料庫'}
+      else if(wd[x.name]&&wd[x.name].length){h=(x.h&&wd[x.name].includes(x.h))?x.h:wd[x.name][0];src='Wikidata'}
+      else if(/^[a-z0-9._]{1,30}$/.test(x.h)){h=x.h;src='AI 推測'}
+      if(!h){noHandle.push(x.name);return}
+      if(seen.has(h))return;seen.add(h);
+      gmSuggest.push({...x,h,src});
+    });
+    if(!gmSuggest.length){gmMsg(`AI 提名的人都查不到 IG 帳號${noHandle.length?`（${noHandle.slice(0,5).map(esc).join('、')}…）`:''}，換個說法再試一次。`,'bad');return}
+    const cnt=k=>gmSuggest.filter(x=>x.src===k).length;
+    gmMsg(`AI 提名 ${raw.length} 位：資料庫 ${cnt('資料庫')}、Wikidata ${cnt('Wikidata')}、AI 推測 ${cnt('AI 推測')}${noHandle.length?`、查不到帳號 ${noHandle.length}`:''}。接著用 Instagram 驗證…`,'ok');
     document.getElementById('ig-list').value=gmSuggest.map(x=>x.h).join('\n');
     if(!document.getElementById('ig-label').value.trim()&&!document.getElementById('ig-words').value.trim())document.getElementById('ig-words').value='';
-    await igFetch({aiNeed:need,aiReasons:Object.fromEntries(gmSuggest.map(x=>[x.h,x.reason])),aiNames:Object.fromEntries(gmSuggest.map(x=>[x.h,x.name]))});
+    await igFetch({aiNeed:need,aiReasons:Object.fromEntries(gmSuggest.map(x=>[x.h,x.reason])),aiNames:Object.fromEntries(gmSuggest.filter(x=>x.src==='AI 推測').map(x=>[x.h,x.name])),aiSrc:Object.fromEntries(gmSuggest.map(x=>[x.h,x.src]))});
     const okN=igResults.filter(r=>!r.brand).length,brandN=igResults.length-okN;
-    gmMsg(`AI 提名 ${gmSuggest.length} 個，驗證後 ${okN} 位是真實存在的創作者${brandN?`，另有 ${brandN} 個判斷為品牌或店家（預設不勾選）`:''}；查不到的帳號（記錯、改名或個人帳號）列在結果下方的排除清單。`,okN?'ok':'bad');
+    gmMsg(`AI 提名 ${raw.length} 位、查到 ${gmSuggest.length} 個帳號，驗證後 ${okN} 位是真實存在的創作者${brandN?`，另有 ${brandN} 個判斷為品牌或店家（預設不勾選）`:''}；查不到的帳號（記錯、改名或個人帳號）列在結果下方的排除清單。`,okN?'ok':'bad');
   }catch(e){gmMsg(esc(e.message),'bad')}finally{btn.disabled=!GM_MODEL}
 }
 /* 2. AI 分類、判斷品牌與相關度（抓取和擴散後自動執行） */
