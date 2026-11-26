@@ -344,6 +344,10 @@ table.t td.ck,table.t th.ck{width:32px}
     </div>
     <div class="panel" style="margin-top:16px">
       <h3>2. 要查詢的帳號</h3>
+      <div class="inline" style="margin-bottom:12px"><label for="ig-pool" class="hint">從候選人資料庫載入</label>
+        <select id="ig-pool" style="border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 10px"></select>
+        <button class="btn small" id="ig-pool-load">載入</button>
+        <span class="hint">資料庫來自網紅排行網站與媒體報導整理的真實帳號，比 AI 猜的可靠</span></div>
       <div class="yt-form">
         <div class="wide"><label for="ig-list">IG 帳號（一行一個，可以貼 @帳號 或 IG 網址）</label><textarea id="ig-list" style="min-height:110px;font-family:inherit;font-size:14px" placeholder="@someone&#10;https://www.instagram.com/another/"></textarea></div>
         <div><label for="ig-words">相關詞（可留空，留空就不篩選）</label><input id="ig-words" type="text" placeholder="汽車、車用、改裝"></div>
@@ -1254,6 +1258,26 @@ async function igConnect(){
     igBusy(false);
   }catch(e){igStatus(esc(e.network?'無法連到 Instagram，請確認網路，或改用 GitHub Pages 上的網址開啟這個系統。':e.message),'bad')}
 }
+const IG_POOL={"健身": ["mattcabfitness", "jharxx", "chingkunlin", "uooqer", "chu124_", "conni3wu", "_tao.190.tao_", "guo_017", "tedy_dddd", "angelina.liuu", "coco__0531", "jessicababyfat", "ashlee_xiu", "candice_sweatlife", "may8572fit", "melody.wan", "hannah_lovelife"], "美食": ["77.food", "thisiskenyoung", "wangfulichef", "aaaron1023", "smallhandcook", "7_food_020291", "missjoey__food", "bichon_poodle", "maylifestyle04_", "chen__roro", "be11e.food", "eden_0522", "traveggo", "bgirl_anlei", "cutemo.love.disney", "eat.1025", "solo_guide", "jk__foodie", "foodieyaya", "neru.foodie"], "旅遊": ["yuting._.1108", "meimeeiiiiiiii", "gracetseng_0821", "witandfolly", "madvnz", "ygt1016", "bb211019", "annyu_liao", "golden___trip", "tai_chi___", "charmianchen", "ninawayliu", "qiuung", "alexhuang1221", "jaydenpax", "xtrachicha", "cathy2wildddd", "g_______v_______g"], "爬山": ["hiimpoca", "chris.in.taiwan", "cathy2wildddd", "omgitsunny", "alexhuang1221", "ninawayliu", "hersh__man", "zonaaa_____", "andrina_wild"], "遊戲": ["joemanweng", "sandykaka_", "xu_m1d", "miao11255", "angel20739", "senyeyezi", "asukachan0613", "a227795", "bimay_nagging", "lingjiepan", "6tan"], "音樂": ["nickthereal4sho", "yogalin_official", "foolandidiot_official", "waynes_so_sad", "momanddad_band", "lynnemusicke", "justice_0611", "michaelpao0324", "djrara0626", "bboychoco", "bboybojin", "cutesww0125", "tingyuoo", "shinyyyq", "jouyangshiu"], "籃球": ["blackielovelife", "jlin7"]};
+function igPoolInit(){
+  const sel=document.getElementById('ig-pool');
+  sel.innerHTML=Object.entries(IG_POOL).map(([k,v])=>`<option value="${esc(k)}">${esc(k)}（${v.length}）</option>`).join('');
+  document.getElementById('ig-pool-load').onclick=()=>{
+    const k=sel.value,ta=document.getElementById('ig-list');
+    ta.value=IG_POOL[k].join('\n');document.getElementById('ig-label').value=k;
+    toast(`已載入「${k}」${IG_POOL[k].length} 個帳號，按「抓取清單上的帳號」`);
+  };
+}
+/* AI 說的人名跟實際帳號對不對得上：避免 AI 把網紅配到同名路人的帳號 */
+function nameMatches(claimed,bd){
+  const c=String(claimed||'').toLowerCase().replace(/\s+/g,'');
+  if(c.length<2)return true;
+  const real=((bd.name||'')+' '+(bd.username||'')+' '+(bd.biography||'')).toLowerCase();
+  const cjk=c.match(/[\u4e00-\u9fff]/g)||[];
+  if(cjk.length>=2){const hit=cjk.filter(ch=>real.includes(ch)).length;return hit>=Math.min(2,cjk.length)}
+  const toks=c.split(/[^a-z0-9]+/).filter(t=>t.length>=3);
+  return !toks.length||toks.some(t=>real.replace(/[^a-z0-9]/g,'').includes(t));
+}
 function igCtx(){
   const words=splitTags(document.getElementById('ig-words').value);
   const negs=splitTags(document.getElementById('ig-negs').value);
@@ -1377,6 +1401,7 @@ async function igFetch(opts){
       const h=handles[i];igProg(`抓取 @${h}（${i+1}/${handles.length}）`,i/handles.length);
       const bd=await igRaw(h,12);
       if(!bd){igExcluded.push([h,'找不到帳號，或不是商業／創作者帳號']);continue}
+      if(o.aiNames&&!nameMatches(o.aiNames[h],bd)){igExcluded.push([`@${h}`,`跟 AI 說的人對不上（AI 說是「${o.aiNames[h]}」，實際是「${bd.name||bd.username}」）`]);continue}
       const r=igEvaluate(bd,ctx);
       if(r.ex){igExcluded.push(r.ex);continue}
       r.ok.brand=looksLikeBrand(bd);found.push(r.ok);
@@ -1485,6 +1510,7 @@ function sendHandlesToIg(handles,label,words,negs){
   toast(`已帶入 ${handles.length} 個 IG 帳號，按「連線」後再按「抓取」`);
 }
 document.getElementById('ig-connect').onclick=igConnect;
+igPoolInit();
 document.getElementById('ig-go').onclick=igFetch;
 document.getElementById('ig-snow').onclick=igSnowball;
 bindRemember('yt','yt-key','yt-remember');
@@ -1565,6 +1591,8 @@ ${(()=>{const c=igCtx();return [c.twOnly?'- 必須是台灣的創作者（以台
 - 從最知名、粉絲最多的人開始列（例如有藍勾勾認證、上過媒體、常接品牌合作的網紅），由知名度高到低排序；不要列一般素人或小帳號。
 - 優先列你很確定帳號名稱的人；只列你有把握 Instagram 帳號名稱正確、而且近年仍在經營的人；不確定帳號名稱就不要列，寧可少列。
 - 不要重複列出這些已經有的帳號：${have.join(', ')||'（無）'}
+- 下面是已經查證過的真實帳號資料庫，請「優先」從中挑出符合需求的人；資料庫裡不夠，才補充你非常確定的其他帳號：${JSON.stringify(IG_POOL)}
+- name 欄位請填這個人的真實姓名或常用藝名，系統會拿它核對帳號是否正確。
 只輸出 JSON 陣列，不要其他文字，格式：[{"username":"IG 帳號名稱（不含 @）","name":"顯示名稱","reason":"一句話說明為什麼符合需求"}]`;
     const list=await gmAsk(prompt);
     gmSuggest=list.map(x=>({h:String(x.username||'').replace(/^@/,'').trim().toLowerCase(),name:x.name||'',reason:x.reason||''}))
@@ -1574,7 +1602,7 @@ ${(()=>{const c=igCtx();return [c.twOnly?'- 必須是台灣的創作者（以台
     gmMsg(`AI 提名了 ${gmSuggest.length} 個帳號，接著用 Instagram 驗證是否真的存在、是不是創作者…`,'ok');
     document.getElementById('ig-list').value=gmSuggest.map(x=>x.h).join('\n');
     if(!document.getElementById('ig-label').value.trim()&&!document.getElementById('ig-words').value.trim())document.getElementById('ig-words').value='';
-    await igFetch({aiNeed:need,aiReasons:Object.fromEntries(gmSuggest.map(x=>[x.h,x.reason]))});
+    await igFetch({aiNeed:need,aiReasons:Object.fromEntries(gmSuggest.map(x=>[x.h,x.reason])),aiNames:Object.fromEntries(gmSuggest.map(x=>[x.h,x.name]))});
     const okN=igResults.filter(r=>!r.brand).length,brandN=igResults.length-okN;
     gmMsg(`AI 提名 ${gmSuggest.length} 個，驗證後 ${okN} 位是真實存在的創作者${brandN?`，另有 ${brandN} 個判斷為品牌或店家（預設不勾選）`:''}；查不到的帳號（記錯、改名或個人帳號）列在結果下方的排除清單。`,okN?'ok':'bad');
   }catch(e){gmMsg(esc(e.message),'bad')}finally{btn.disabled=!GM_MODEL}
