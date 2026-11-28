@@ -373,6 +373,25 @@ table.t td.ck,table.t th.ck{width:32px}
   </section>
 
   <section class="view" id="view-data" hidden>
+    <div class="panel" style="margin-bottom:20px">
+      <h3>雲端同步（多台裝置自動同步）</h3>
+      <p class="hint">貼上 GitHub 權杖後，資料會自動存到你 GitHub 帳號裡的一個<strong>私人 Gist</strong>。電腦、iPad 貼同一把權杖，就會自動同步：每次修改幾秒內上傳，切回網頁時自動載入最新資料。權杖只用來讀寫這份資料，勾選「記住」只存在這台裝置。</p>
+      <div class="inline" style="margin-top:10px">
+        <input type="password" id="gh-token" aria-label="GitHub 權杖" placeholder="ghp_… 或 github_pat_…" autocomplete="off" style="min-width:280px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px">
+        <button class="btn primary" id="gh-connect">連線並同步</button>
+        <label class="inline" style="font-size:14px"><input type="checkbox" id="gh-remember">在這台裝置記住</label>
+        <button class="btn small" id="gh-off" hidden>停止同步</button>
+      </div>
+      <div class="msg" id="gh-msg" role="status"></div>
+      <details style="margin-top:10px"><summary class="hint" style="cursor:pointer">怎麼取得 GitHub 權杖？（點開看步驟）</summary>
+        <ol class="ex" style="line-height:1.8">
+          <li>登入 GitHub，打開 <a href="https://github.com/settings/tokens/new?scopes=gist&description=KOL%20system%20sync" target="_blank" rel="noopener">建立權杖的頁面</a>（已自動勾好 gist 權限）。</li>
+          <li>「Expiration」選到期末之後的日期，例如 90 天。</li>
+          <li>確認只勾了 <code>gist</code>，其他都不要勾，拉到最下面按「Generate token」。</li>
+          <li>複製那串 <code>ghp_</code> 開頭的權杖貼到上面。這串只會顯示一次，可以存在自己的備忘錄。</li>
+        </ol>
+      </details>
+    </div>
     <div id="data-out"></div>
   </section>
 </main>
@@ -536,7 +555,9 @@ try{const raw=localStorage.getItem(LS_KEY);if(raw)applyState(JSON.parse(raw))}ca
 let remoteRef=null,saving=false,pendingSave=false,saveTimer;
 function setSync(t){document.getElementById('sync').textContent=t}
 function persist(){
+  if(typeof ghApplying==='undefined'||!ghApplying)state._ts=Date.now();
   try{localStorage.setItem(LS_KEY,JSON.stringify(state))}catch(e){}
+  if(typeof ghSchedule==='function')ghSchedule();
   clearTimeout(saveTimer);saveTimer=setTimeout(saveRemote,800);
 }
 async function saveRemote(){
@@ -1211,7 +1232,7 @@ document.getElementById('yt-test').onclick=async()=>{
 
 
 /* ---------- 記住金鑰（選用，只存在這台裝置） ---------- */
-const SECRET_KEYS={yt:'kol-yt-key',ig:'kol-ig-token',gm:'kol-gm-key'};
+const SECRET_KEYS={yt:'kol-yt-key',ig:'kol-ig-token',gm:'kol-gm-key',gh:'kol-gh-token'};
 function loadSecret(kind){try{return localStorage.getItem(SECRET_KEYS[kind])||''}catch(e){return ''}}
 function saveSecret(kind,val,remember){try{if(remember&&val)localStorage.setItem(SECRET_KEYS[kind],val);else localStorage.removeItem(SECRET_KEYS[kind])}catch(e){}}
 function bindRemember(kind,inputId,boxId){
@@ -1740,6 +1761,111 @@ function route(){
 }
 function renderAll(){fillForm();renderRecommend();renderRanking();renderReview();renderData()}
 window.addEventListener('hashchange',route);
+
+/* ---------- 雲端同步（GitHub 私人 Gist）：多台裝置自動同步 ---------- */
+const GH_API='https://api.github.com/';
+const GH_DESC='kol-decision-sync（KOL 合作決策輔助系統的同步資料，請勿刪除）';
+const GH_FILE='kol-data.json';
+var GH_TOKEN='',GH_GIST=null,ghTimer=null,ghSaving=false,ghPending=false,ghApplying=false;
+function ghMeta(){try{return JSON.parse(localStorage.getItem('kol-gh-meta')||'{}')}catch(e){return {}}}
+function ghSetMeta(m){try{localStorage.setItem('kol-gh-meta',JSON.stringify({...ghMeta(),...m}))}catch(e){}}
+function ghMsg(t,cls){const m=document.getElementById('gh-msg');if(m){m.className='msg'+(cls?' '+cls:'');m.textContent=t}}
+function ghStamp(){const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
+async function ghFetch(path,opts={}){
+  let r;
+  try{r=await fetch(GH_API+path,{...opts,headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+GH_TOKEN,...(opts.body?{'Content-Type':'application/json'}:{})}})}
+  catch(e){const err=new Error('連不到 GitHub，請確認網路。');err.network=true;throw err}
+  if(r.status===401)throw new Error('GitHub 權杖不正確或已過期，請重新產生。');
+  if(r.status===403||r.status===404&&path.startsWith('gists')&&opts.method)throw new Error('這把權杖沒有 Gist 權限，產生時要勾選「gist」。');
+  if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error('GitHub 錯誤：'+(d.message||r.status))}
+  return r.json();
+}
+async function ghReadGist(g){
+  const f=g.files&&g.files[GH_FILE];if(!f)return null;
+  let txt=f.content;
+  if(f.truncated||txt==null){const r=await fetch(f.raw_url);txt=await r.text()}
+  try{return JSON.parse(txt)}catch(e){return null}
+}
+function ghApply(pack,label){
+  if(!pack||!pack.state||!Array.isArray(pack.state.kols))return false;
+  ghApplying=true;
+  const st=pack.state;st.poolExtra=st.poolExtra||{};st.removed=st.removed||[];st.campaigns=st.campaigns||[];
+  applyState(st);state._ts=pack.ts||Date.now();
+  try{localStorage.setItem(LS_KEY,JSON.stringify(state))}catch(e){}
+  renderAll();try{igPoolRender()}catch(e){}
+  ghApplying=false;
+  ghSetMeta({synced:pack.ts});
+  if(label)toast(label);
+  return true;
+}
+async function ghPull(silent){
+  if(!GH_TOKEN||!GH_GIST)return;
+  try{
+    const g=await ghFetch('gists/'+GH_GIST);const pack=await ghReadGist(g);
+    const local=state._ts||0,synced=ghMeta().synced||0;
+    if(pack&&pack.ts>synced&&pack.ts>local){
+      if(local>synced&&!confirm('雲端有另一台裝置更新的資料，這台裝置也有還沒同步的修改。\n\n按「確定」改用雲端的資料（這台的修改會被取代）；按「取消」保留這台的資料並上傳到雲端。')){ghSave();return}
+      ghApply(pack,silent?'':'已載入雲端最新資料（'+(pack.device||'另一台裝置')+'）');
+    }else if(local>synced){ghSave()}
+    ghMsg('已同步，'+ghStamp(),'ok');setSync('已同步到 GitHub（'+ghStamp()+'）');
+  }catch(e){ghMsg(e.message,'bad')}
+}
+async function ghSave(){
+  if(!GH_TOKEN||!GH_GIST)return;
+  if(ghSaving){ghPending=true;return}
+  ghSaving=true;
+  const ts=state._ts||Date.now();
+  const pack={app:'kol-decision',version:1,ts,device:ghDevice(),state};
+  try{
+    await ghFetch('gists/'+GH_GIST,{method:'PATCH',body:JSON.stringify({files:{[GH_FILE]:{content:JSON.stringify(pack)}}})});
+    ghSetMeta({synced:ts});ghMsg('已同步，'+ghStamp(),'ok');setSync('已同步到 GitHub（'+ghStamp()+'）');
+  }catch(e){ghMsg('同步失敗：'+e.message+'（資料先存在這台裝置）','bad');setSync('同步失敗，資料先存在這台裝置')}
+  ghSaving=false;
+  if(ghPending){ghPending=false;ghSave()}
+}
+function ghDevice(){const u=navigator.userAgent;return /iPad|Macintosh.*Mobile|Macintosh.*Safari.*Version.*Mobile/.test(u)||(/Macintosh/.test(u)&&navigator.maxTouchPoints>1)?'iPad':/iPhone/.test(u)?'iPhone':/Android/.test(u)?'Android':/Mac/.test(u)?'Mac':/Windows/.test(u)?'Windows':'電腦'}
+function ghSchedule(){if(!GH_TOKEN||!GH_GIST||ghApplying)return;clearTimeout(ghTimer);ghTimer=setTimeout(ghSave,2500)}
+async function ghConnect(auto){
+  GH_TOKEN=document.getElementById('gh-token').value.trim();GH_GIST=null;
+  if(!GH_TOKEN){if(!auto)ghMsg('請先貼上 GitHub 權杖。','bad');return}
+  ghMsg('連線中…');
+  try{
+    let found=null;const saved=ghMeta().gist;
+    if(saved){try{const g=await ghFetch('gists/'+saved);if(g.files&&g.files[GH_FILE])found=g}catch(e){if(/權杖/.test(e.message))throw e}}
+    for(let page=1;!found&&page<=5;page++){
+      const list=await ghFetch('gists?per_page=100&page='+page);
+      const hit=list.find(g=>g.description===GH_DESC&&g.files&&g.files[GH_FILE]);
+      if(hit)found=await ghFetch('gists/'+hit.id);
+      if(list.length<100)break;
+    }
+    if(found){
+      GH_GIST=found.id;ghSetMeta({gist:found.id});
+      const pack=await ghReadGist(found);
+      const local=state._ts||0,synced=ghMeta().synced||0;
+      if(pack&&pack.ts>local&&(local<=synced||!auto)){
+        const when=new Date(pack.ts).toLocaleString('zh-TW');
+        if(auto||local<=synced||confirm(`雲端有 ${when}（${pack.device||'另一台裝置'}）的資料：KOL ${pack.state.kols.length} 位、結案紀錄 ${(pack.state.campaigns||[]).length} 筆。\n\n要改用雲端的資料嗎？按「取消」會用這台裝置的資料覆蓋雲端。`))ghApply(pack,'已載入雲端資料');
+        else{state._ts=Date.now();await ghSave()}
+      }else if(local>(pack&&pack.ts||0)){await ghSave()}
+      else ghSetMeta({synced:pack&&pack.ts||0});
+      ghMsg(`已連線，資料存在你 GitHub 的私人 Gist。之後每次修改都會自動同步（${ghStamp()}）`,'ok');
+    }else{
+      state._ts=state._ts||Date.now();
+      const pack={app:'kol-decision',version:1,ts:state._ts,device:ghDevice(),state};
+      const g=await ghFetch('gists',{method:'POST',body:JSON.stringify({description:GH_DESC,public:false,files:{[GH_FILE]:{content:JSON.stringify(pack)}}})});
+      GH_GIST=g.id;ghSetMeta({gist:g.id,synced:state._ts});
+      ghMsg('已建立雲端同步空間，目前這台裝置的資料已上傳。到其他裝置貼上同一把權杖就會自動載入。','ok');
+    }
+    setSync('已同步到 GitHub（'+ghStamp()+'）');
+    document.getElementById('gh-off').hidden=false;
+  }catch(e){GH_GIST=null;ghMsg(e.message,'bad')}
+}
+document.getElementById('gh-connect').onclick=()=>ghConnect(false);
+document.getElementById('gh-off').onclick=()=>{GH_TOKEN='';GH_GIST=null;saveSecret('gh','',false);document.getElementById('gh-token').value='';document.getElementById('gh-remember').checked=false;document.getElementById('gh-off').hidden=true;ghMsg('已停止同步。雲端的資料還在，之後貼上權杖就能接回來。');setSync('資料存在這台裝置')};
+bindRemember('gh','gh-token','gh-remember');
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')ghPull(true)});
+if(document.getElementById('gh-token').value)ghConnect(true);
+
 initForm();renderAll();route();initRemote();
 </script>
 </body>
