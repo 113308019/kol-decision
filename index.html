@@ -315,6 +315,7 @@ table.t td.ck,table.t th.ck{width:32px}
       </div>
       <div class="inline" style="margin-top:10px" hidden><label for="ig-acct" class="hint">使用的 IG 帳號</label><select id="ig-acct" style="border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 10px"></select></div>
       <div class="msg" id="ig-conn-msg" role="status"></div>
+      <div class="hint" id="ig-quota" aria-live="polite" style="margin-top:8px"></div>
       <details style="margin-top:12px"><summary class="hint" style="cursor:pointer">還沒有權杖，或權杖過期了？（點開看取得方式）</summary>
         <ol class="ex" style="line-height:1.8">
           <li>打開 <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener">Graph API 測試工具</a>，「Meta 應用程式」選你們的 App，「用戶或粉絲專頁」選「用戶權杖」。</li>
@@ -1246,20 +1247,81 @@ function bindRemember(kind,inputId,boxId){
 const IG_BASE='https://graph.facebook.com/v27.0/';
 let IG_TOKEN='',IG_ME=null,igResults=[],igExcluded=[];
 const estimatePriceIG=f=>Math.round((5000+f*.2)/1000)*1000;
+/* ---------- IG 額度管理：用量計數、帳號快取、被限制時保留進度並自動接續 ---------- */
+const IGQ_CALLS='kol-ig-calls',IGQ_BLOCK='kol-ig-block',IGQ_CACHE='kol-ig-cache',IGQ_ME='kol-ig-me';
+const IG_TTL_OK=3*864e5,IG_TTL_MISS=864e5,IG_HOUR_MAX=200;
+let igUsage=null,igCacheObj=null,igLast=null,igRunning=false;
+function lsGet(k,d){try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}}
+const hhmm=t=>{const d=new Date(t);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
+function igCalls(){const now=Date.now();return lsGet(IGQ_CALLS,[]).filter(t=>now-t<36e5)}
+function igCountCall(){const a=igCalls();a.push(Date.now());lsSet(IGQ_CALLS,a)}
+function igBlockedUntil(){const b=lsGet(IGQ_BLOCK,0);return b>Date.now()?b:0}
+function igSetBlock(){
+  /* Meta 有給「還要等幾分鐘」就用它；沒有就用這台裝置最早一筆查詢滿一小時的時間估計（滾動一小時計算），最少 10 分鐘、最多 60 分鐘 */
+  let min=igUsage&&igUsage.wait;
+  if(!min){const a=igCalls();min=a.length?Math.ceil((a[0]+36e5-Date.now())/6e4):60;if(a.length<IG_HOUR_MAX*.6)min=60}
+  min=Math.max(10,Math.min(60,min||60));
+  lsSet(IGQ_BLOCK,Date.now()+min*6e4);
+}
+function igReadUsage(r){
+  try{
+    const a=r.headers.get('x-app-usage');
+    if(a){const j=JSON.parse(a);igUsage={...(igUsage||{}),pct:Math.max(j.call_count||0,j.total_time||0,j.total_cputime||0)}}
+    const b=r.headers.get('x-business-use-case-usage');
+    if(b){const j=JSON.parse(b);Object.values(j).flat().forEach(x=>{if(!x)return;const p=Math.max(x.call_count||0,x.total_time||0,x.total_cputime||0);igUsage={...(igUsage||{}),pct:Math.max(p,(igUsage&&igUsage.pct)||0),wait:x.estimated_time_to_regain_access||0}})}
+  }catch(e){}
+}
+function igRateMsg(){const b=igBlockedUntil();return `Instagram 暫時限制查詢（Meta 規定每小時大約 ${IG_HOUR_MAX} 次，滾動計算）。${b?`預計 ${hhmm(b)} 左右恢復。`:''}已經抓到的結果會保留，已查過的帳號也存在快取，之後再抓不會重複花額度。`}
+function igRateErr(){const e=new Error(igRateMsg());e.rate=true;return e}
 async function igGet(path,params){
+  if(igBlockedUntil())throw igRateErr();
   const u=new URL(IG_BASE+path);
   Object.entries({...params,access_token:IG_TOKEN}).forEach(([k,v])=>u.searchParams.set(k,v));
   let r;
   try{r=await fetch(u.toString())}catch(e){const err=new Error('network');err.network=true;throw err}
+  igCountCall();igReadUsage(r);
   const d=await r.json().catch(()=>({}));
-  if(d.error){
-    const err=new Error(d.error.message||'Instagram API 錯誤');err.code=d.error.code;err.sub=d.error.error_subcode;
-    if(d.error.code===190){err.expired=true;err.message='權杖無效或已過期，請重新產生並延長成 60 天版本。'}
-    else if(d.error.code===4||d.error.code===17||d.error.code===32){err.rate=true;err.message='查詢太頻繁，被 Instagram 暫時限制，請等一小時後再試。'}
+  const c=d.error&&d.error.code;
+  if(d.error||r.status===429){
+    const err=new Error((d.error&&d.error.message)||'Instagram API 錯誤');err.code=c;err.sub=d.error&&d.error.error_subcode;
+    if(c===190){err.expired=true;err.message='權杖無效或已過期，請重新產生並延長成 60 天版本。'}
+    else if(r.status===429||[4,17,32,613].includes(c)||(c>=80000&&c<=80014)){err.rate=true;igSetBlock();err.message=igRateMsg()}
+    igQuotaRender();
     throw err;
   }
+  igQuotaRender();
   return d;
 }
+/* 帳號快取：查過的帳號 3 天內直接用（查不到的記 1 天），存在這台裝置 */
+function igCache(){if(!igCacheObj)igCacheObj=lsGet(IGQ_CACHE,{});return igCacheObj}
+function igCacheGet(key,limit){
+  const e=igCache()[key];if(!e)return undefined;
+  const age=Date.now()-e.t;
+  if(e.v===null)return age<IG_TTL_MISS?null:undefined;
+  if(age>IG_TTL_OK)return undefined;
+  if(limit&&e.n<limit&&e.mc>e.n)return undefined;
+  return e.v;
+}
+function igCachePut(key,v,limit,mc){
+  const c=igCache();c[key]={t:Date.now(),n:limit||0,mc:mc||0,v};
+  let ks=Object.keys(c);
+  if(ks.length>400)ks.sort((a,b)=>c[a].t-c[b].t).slice(0,ks.length-400).forEach(k=>delete c[k]);
+  for(let i=0;i<6&&!lsSet(IGQ_CACHE,c);i++){ks=Object.keys(c).sort((a,b)=>c[a].t-c[b].t);ks.slice(0,Math.ceil(ks.length/3)).forEach(k=>delete c[k])}
+}
+function igSlim(bd){const m=(bd.media&&bd.media.data)||[];return {username:bd.username,name:bd.name,biography:bd.biography,followers_count:bd.followers_count,media_count:bd.media_count,media:{data:m.map(x=>({...x,caption:String(x.caption||'').slice(0,800)}))}}}
+function igQuotaRender(){
+  const el=document.getElementById('ig-quota');if(!el)return;
+  const n=igCalls().length,bu=igBlockedUntil(),cn=Object.keys(igCache()).filter(k=>!k.startsWith('seed:')).length;
+  let h=`這台裝置近一小時查了 <strong>${n}</strong> 次 Instagram（Meta 上限大約每小時 ${IG_HOUR_MAX} 次，用滾動一小時計算，iPad 等其他裝置用同一個 App 也會算進去）${igUsage&&igUsage.pct?`；Meta 回報目前用量 ${igUsage.pct}%`:''}。已快取 ${cn} 個帳號，3 天內再抓不花額度。`;
+  if(bu)h+=`<br><strong style="color:var(--bad,#b42318)">目前被限制，預計 ${hhmm(bu)} 左右恢復。</strong>${igLast?'這個頁面開著的話，恢復後會自動接著抓剩下的帳號。':''} <button class="btn small" id="ig-retry">現在試試</button>`;
+  else if(n>=IG_HOUR_MAX*.75)h+=' <strong>快到上限了，建議一次少抓幾個。</strong>';
+  el.innerHTML=h;
+  const b=document.getElementById('ig-retry');
+  if(b)b.onclick=()=>{lsSet(IGQ_BLOCK,0);igQuotaRender();if(igLast)igResume();else toast('已解除等待，可以再按一次抓取試試')};
+}
+function igResume(){if(!igLast||!IG_ME||igRunning)return;const l=igLast;igLast=null;toast('Instagram 額度恢復了，接著抓剩下的帳號');l.fn(l.opts)}
+setInterval(()=>{igQuotaRender();if(igLast&&IG_ME&&!igRunning&&!igBlockedUntil())igResume()},30000);
 function parseIgHandles(text){
   const out=[];
   String(text||'').split(/[\s,，、;；]+/).forEach(t=>{
@@ -1295,6 +1357,15 @@ async function igConnect(){
   igBusy(true);
   if(!IG_TOKEN){igStatus('請先貼上權杖。','bad');return}
   igStatus('連線中…');
+  const tk=IG_TOKEN.slice(-16),saved=lsGet(IGQ_ME,null);
+  if(saved&&saved.tk===tk&&saved.accts&&saved.accts.length&&(!saved.exp||saved.exp*1000>Date.now())){
+    const sel=document.getElementById('ig-acct'),accts=saved.accts;
+    sel.innerHTML=accts.map((a,i)=>`<option value="${i}">@${esc(a.username)}（粉專：${esc(a.page)}）</option>`).join('');
+    sel.parentElement.hidden=accts.length<2;sel.onchange=()=>{IG_ME=accts[+sel.value]};
+    IG_ME=accts[0];
+    const ds=saved.exp?(()=>{const dt=new Date(saved.exp*1000);return `，權杖 ${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()} 到期（剩 ${Math.round((saved.exp*1000-Date.now())/864e5)} 天）`})():'';
+    igStatus(`連線成功：@${esc(IG_ME.username)}${ds}。`,'ok');igBusy(false);igQuotaRender();return;
+  }
   try{
     const r=await igGet('me/accounts',{fields:'name,instagram_business_account{id,username}',limit:100});
     const accts=(r.data||[]).filter(p=>p.instagram_business_account).map(p=>({page:p.name,id:p.instagram_business_account.id,username:p.instagram_business_account.username}));
@@ -1308,6 +1379,7 @@ async function igConnect(){
     try{
       const d=await igGet('debug_token',{input_token:IG_TOKEN});
       const t=d.data&&d.data.expires_at;
+      if(t===0||t>Date.now()/1000+86400)lsSet(IGQ_ME,{tk,accts,exp:t||0});
       if(t===0)exp='，權杖不會過期';
       else if(t){const days=(t*1000-Date.now())/864e5;const dt=new Date(t*1000);const ds=dt.getFullYear()+'/'+(dt.getMonth()+1)+'/'+dt.getDate();
         exp=days<1?`。<strong>注意：這是短效權杖，大約 ${Math.max(1,Math.round(days*24*60))} 分鐘後過期</strong>，請照下方說明延長成 60 天版本`:`，權杖 ${ds} 到期（剩 ${Math.round(days)} 天）`}
@@ -1394,11 +1466,15 @@ function igRegion(text){
   if(cjk<15&&latin>60&&!twCue)return {bad:'貼文幾乎沒有中文，可能不是台灣創作者'};
   return {bad:null,tw:twCue};
 }
-async function igRaw(h,limit){
+async function igRaw(h,limit,noCache){
+  const key=String(h).toLowerCase();
+  if(!noCache){const c=igCacheGet(key,limit);if(c!==undefined){igRaw.hits=(igRaw.hits||0)+1;return c}}
   try{
     const r=await igGet(IG_ME.id,{fields:`business_discovery.username(${h}){username,name,biography,followers_count,media_count,media.limit(${limit}){caption,like_count,comments_count,view_count,media_type,timestamp}}`});
-    return r.business_discovery;
-  }catch(e){if(e.expired||e.rate||e.network)throw e;return null}
+    const bd=r.business_discovery||null;
+    if(!noCache)igCachePut(key,bd?igSlim(bd):null,limit,bd&&bd.media_count);
+    return bd;
+  }catch(e){if(e.expired||e.rate||e.network)throw e;if(!noCache)igCachePut(key,null,limit);return null}
 }
 const AUTO_CATS=[
   ['美妝保養',['美妝','彩妝','保養','化妝','口紅','唇膏','底妝','粉底','眼影','護膚','skincare','makeup','beauty','醫美','香水']],
@@ -1479,7 +1555,7 @@ function igFail(e){
   document.getElementById('ig-out').innerHTML=`<div class="empty"><p>${esc(e.network?'無法連到 Instagram。':e.message)}</p></div>`;
   if(e.expired){IG_ME=null;igStatus('權杖已過期，請重新產生後貼上，再按「連線」。','bad')}
 }
-function igBusy(on){['ig-go','ig-snow'].forEach(id=>{document.getElementById(id).disabled=on||!IG_ME})}
+function igBusy(on){igRunning=on;['ig-go','ig-snow'].forEach(id=>{document.getElementById(id).disabled=on||!IG_ME})}
 let igMode='fetch';
 async function igFetch(opts){
   const o=(opts&&typeof opts==='object'&&'aiNeed' in opts)?opts:{};
@@ -1487,11 +1563,12 @@ async function igFetch(opts){
   const handles=parseIgHandles(document.getElementById('ig-list').value).slice(0,50);
   if(!handles.length){toast('請輸入至少一個 IG 帳號');return}
   const ctx={...igCtx(),strict:false,auto:!document.getElementById('ig-label').value.trim(),hard:!!o.aiNeed};igBusy(true);document.getElementById('ig-out').innerHTML='';
-  const found=[];igExcluded=[];
+  const found=[];igExcluded=[];let stopped=0;igRaw.hits=0;igLast=null;
   try{
     for(let i=0;i<handles.length;i++){
       const h=handles[i];igProg(`抓取 @${h}（${i+1}/${handles.length}）`,i/handles.length);
-      const bd=await igRaw(h,12);
+      let bd;
+      try{bd=await igRaw(h,12)}catch(e){if(!e.rate)throw e;stopped=handles.length-i;break}
       if(!bd){igExcluded.push([h,'找不到帳號，或不是商業／創作者帳號']);continue}
       if(o.aiNames&&o.aiNames[h]&&!nameMatches(o.aiNames[h],bd)){igExcluded.push([`@${h}`,`跟 AI 說的人對不上（AI 說是「${o.aiNames[h]}」，實際是「${bd.name||bd.username}」）`]);continue}
       const r=igEvaluate(bd,ctx);
@@ -1503,8 +1580,11 @@ async function igFetch(opts){
     await gmEnrich(found,o.aiNeed||document.getElementById('gm-need').value.trim()||ctx.words.join('、'));
     igApplyAiRegion(found,ctx);
     if(o.aiNeed)found.sort((a,b)=>b.k.followers-a.k.followers);
-    igFinish(found,o.aiNeed?'ai':'fetch');
-  }catch(e){igFail(e)}finally{igBusy(false)}
+    const hitTxt=igRaw.hits?`（其中 ${igRaw.hits} 個用快取，沒花額度）`:'';
+    if(stopped){igLast={fn:igFetch,opts:o};igFinish(found,o.aiNeed?'ai':'fetch',`先顯示已抓到的 ${found.length} 位${hitTxt}。還有 ${stopped} 個帳號沒抓：${igRateMsg()}恢復後${'這個頁面開著會自動接著抓'}，或到時候再按一次「抓取清單上的帳號」也可以。`)}
+    else igFinish(found,o.aiNeed?'ai':'fetch',`完成：抓到 ${found.length} 位，排除 ${igExcluded.length} 個帳號${hitTxt}。`);
+    return {stopped};
+  }catch(e){igFail(e)}finally{igBusy(false);igQuotaRender()}
 }
 /* 雪球式擴散：讀種子帳號的貼文，找出被 @ 標註的帳號，再逐一檢查是否同領域 */
 async function igSnowball(){
@@ -1515,36 +1595,48 @@ async function igSnowball(){
   const maxCand=Math.max(5,Math.min(60,parseInt(document.getElementById('ig-max').value)||30));
   igBusy(true);document.getElementById('ig-out').innerHTML='';igExcluded=[];
   const known=new Set([...seeds,...state.kols.filter(k=>k.platform==='IG').map(k=>String(k.handle).toLowerCase())]);
-  const mentions={},seedNames={};let postsRead=0,seedsOk=0,textPosts=0;
+  const mentions={},seedNames={};let postsRead=0,seedsOk=0,textPosts=0,stopped=0,stopAt='';igRaw.hits=0;igLast=null;
   try{
     for(let i=0;i<seeds.length;i++){
       const s=seeds[i];igProg(`讀取種子 @${s} 的貼文（${i+1}/${seeds.length}）`,.3*i/seeds.length);
-      const bd=(await igRaw(s,50))||(await igRaw(s,25));
-      if(!bd){igExcluded.push([s,'種子帳號查不到（要是商業或創作者帳號）']);continue}
-      let caps=((bd.media&&bd.media.data)||[]).map(m=>m.caption||'');
-      let after=bd.media&&bd.media.paging&&bd.media.paging.cursors&&bd.media.paging.cursors.after;
-      for(let pg=0;pg<2&&after;pg++){
-        try{const r2=await igGet(IG_ME.id,{fields:`business_discovery.username(${s}){media.after(${after}).limit(50){caption}}`});
-          const m2=(r2.business_discovery&&r2.business_discovery.media)||{};const more=(m2.data||[]).map(m=>m.caption||'');
-          if(!more.length)break;caps=caps.concat(more);
-          after=m2.paging&&m2.paging.cursors&&m2.paging.cursors.after;
-        }catch(e){if(e.expired||e.rate||e.network)throw e;break}
-      }
-      seedsOk++;seedNames[s]=bd.name||'';postsRead+=caps.length;textPosts+=caps.filter(c=>c.trim()).length;
-      const text=caps.join('\n')+'\n'+(bd.biography||'');
-      const hs=new Set();
-      (text.match(/@([A-Za-z0-9._]{2,30})/g)||[]).forEach(m=>{const h=m.slice(1).toLowerCase().replace(/\.+$/,'');if(h&&!known.has(h))hs.add(h)});
-      hs.forEach(h=>{(mentions[h]=mentions[h]||new Set()).add(bd.username)});
+      /* 種子的掃描結果（只存被 @ 的帳號，不存整篇貼文）放快取，重跑不花額度 */
+      let sd=igCacheGet('seed:'+s);
+      if(sd===undefined){
+        let bd;
+        try{
+          bd=(await igRaw(s,50,true))||(await igRaw(s,25,true));
+          if(bd){
+            let caps=((bd.media&&bd.media.data)||[]).map(m=>m.caption||'');
+            let after=bd.media&&bd.media.paging&&bd.media.paging.cursors&&bd.media.paging.cursors.after;
+            for(let pg=0;pg<2&&after;pg++){
+              try{const r2=await igGet(IG_ME.id,{fields:`business_discovery.username(${s}){media.after(${after}).limit(50){caption}}`});
+                const m2=(r2.business_discovery&&r2.business_discovery.media)||{};const more=(m2.data||[]).map(m=>m.caption||'');
+                if(!more.length)break;caps=caps.concat(more);
+                after=m2.paging&&m2.paging.cursors&&m2.paging.cursors.after;
+              }catch(e){if(e.expired||e.network)throw e;break}
+            }
+            const text=caps.join('\n')+'\n'+(bd.biography||'');
+            const ms=new Set();(text.match(/@([A-Za-z0-9._]{2,30})/g)||[]).forEach(m=>{const h=m.slice(1).toLowerCase().replace(/\.+$/,'');if(h)ms.add(h)});
+            sd={username:bd.username,name:bd.name||'',n:caps.length,textN:caps.filter(c=>c.trim()).length,mentions:[...ms]};
+          }else sd=null;
+          igCachePut('seed:'+s,sd);
+        }catch(e){if(!e.rate)throw e;stopped=seeds.length-i;stopAt='seed';break}
+      }else igRaw.hits++;
+      if(!sd){igExcluded.push([s,'種子帳號查不到（要是商業或創作者帳號）']);continue}
+      seedsOk++;seedNames[s]=sd.name;postsRead+=sd.n;textPosts+=sd.textN;
+      sd.mentions.filter(h=>!known.has(h)).forEach(h=>{(mentions[h]=mentions[h]||new Set()).add(sd.username)});
     }
-    const cands=Object.entries(mentions).sort((a,b)=>b[1].size-a[1].size).slice(0,maxCand);
+    const cands=stopped?[]:Object.entries(mentions).sort((a,b)=>b[1].size-a[1].size).slice(0,maxCand);
     const total=Object.keys(mentions).length;
+    if(stopped){igLast={fn:igSnowball};igFinish([],'snow',`讀完 ${seedsOk} 個種子，還有 ${stopped} 個種子沒讀：${igRateMsg()}恢復後這個頁面開著會自動接著跑。`);return}
     if(!cands.length){igFinish([],'snow',seedsOk?`讀了 ${seedsOk} 個種子共 ${postsRead} 篇貼文（${textPosts} 篇有文字），內文裡沒有 @ 標註其他帳號。很多創作者是用「照片標註」或「共同創作」功能標人，這兩種 Instagram API 讀不到，所以要換幾個習慣在內文 @ 別人的種子（例如常發合作、團購、出遊合照的人），或改從 YouTube 影片說明裡的來賓帳號開始。`:'種子帳號都查不到。');return}
     const found=[];
     for(let i=0;i<cands.length;i++){
       const [h,by]=cands[i];igProg(`檢查被標註的 @${h}（${i+1}/${cands.length}）`,.3+.7*i/cands.length);
       const alias0=looksLikeAlias(h,'',seeds,{});
       if(alias0){igExcluded.push([h,`疑似種子本人的其他帳號（@${alias0}）`]);continue}
-      const bd=await igRaw(h,12);
+      let bd;
+      try{bd=await igRaw(h,12)}catch(e){if(!e.rate)throw e;stopped=cands.length-i;break}
       if(!bd){igExcluded.push([h,'個人帳號或查不到（只能查商業／創作者帳號）']);continue}
       const alias=looksLikeAlias(bd.username,bd.name,seeds,seedNames);
       if(alias){igExcluded.push([bd.name||h,`疑似種子本人的其他帳號（@${alias}）`]);continue}
@@ -1558,8 +1650,10 @@ async function igSnowball(){
     igApplyAiRegion(found,ctx);
     const catN={};found.forEach(r=>catN[r.k.category]=(catN[r.k.category]||0)+1);
     found.sort((a,b)=>((a.k.category==='其他／未分類')-(b.k.category==='其他／未分類'))||(catN[b.k.category]-catN[a.k.category])||a.k.category.localeCompare(b.k.category)||(a.low-b.low)||(b.by.length-a.by.length)||(b.k.followers-a.k.followers));
-    igFinish(found,'snow',`完成：讀了 ${seedsOk} 個種子共 ${postsRead} 篇貼文，找到 ${total} 個被標註的帳號，檢查了 ${cands.length} 個，${found.length} 位是創作者${total>cands.length?`（還有 ${total-cands.length} 個沒檢查，可以調高上限再跑一次）`:''}。`);
-  }catch(e){igFail(e)}finally{igBusy(false)}
+    const hitTxt=igRaw.hits?`（${igRaw.hits} 次用快取，沒花額度）`:'';
+    if(stopped){igLast={fn:igSnowball};igFinish(found,'snow',`先顯示已檢查的結果：${found.length} 位是創作者${hitTxt}。還有 ${stopped} 個被標註的帳號沒檢查：${igRateMsg()}恢復後這個頁面開著會自動接著跑。`);return}
+    igFinish(found,'snow',`完成：讀了 ${seedsOk} 個種子共 ${postsRead} 篇貼文，找到 ${total} 個被標註的帳號，檢查了 ${cands.length} 個，${found.length} 位是創作者${total>cands.length?`（還有 ${total-cands.length} 個沒檢查，可以調高上限再跑一次）`:''}${hitTxt}。`);
+  }catch(e){igFail(e)}finally{igBusy(false);igQuotaRender()}
 }
 function renderIgResults(){
   const out=document.getElementById('ig-out');
@@ -1607,6 +1701,7 @@ document.getElementById('ig-connect').onclick=igConnect;
 igPoolInit();
 document.getElementById('ig-go').onclick=igFetch;
 document.getElementById('ig-snow').onclick=igSnowball;
+igQuotaRender();
 bindRemember('yt','yt-key','yt-remember');
 bindRemember('ig','ig-token','ig-remember');
 
@@ -1710,8 +1805,9 @@ ${(()=>{const c=igCtx();return [c.twOnly?'- 必須是台灣的創作者（以台
     gmMsg(`AI 提名 ${raw.length} 位：資料庫 ${cnt('資料庫')}、Wikidata ${cnt('Wikidata')}、AI 推測 ${cnt('AI 推測')}${noHandle.length?`、查不到帳號 ${noHandle.length}`:''}。接著用 Instagram 驗證…`,'ok');
     document.getElementById('ig-list').value=gmSuggest.map(x=>x.h).join('\n');
     if(!document.getElementById('ig-label').value.trim()&&!document.getElementById('ig-words').value.trim())document.getElementById('ig-words').value='';
-    await igFetch({aiNeed:need,aiReasons:Object.fromEntries(gmSuggest.map(x=>[x.h,x.reason])),aiNames:Object.fromEntries(gmSuggest.filter(x=>x.src==='AI 推測').map(x=>[x.h,x.name])),aiSrc:Object.fromEntries(gmSuggest.map(x=>[x.h,x.src]))});
+    const fr=await igFetch({aiNeed:need,aiReasons:Object.fromEntries(gmSuggest.map(x=>[x.h,x.reason])),aiNames:Object.fromEntries(gmSuggest.filter(x=>x.src==='AI 推測').map(x=>[x.h,x.name])),aiSrc:Object.fromEntries(gmSuggest.map(x=>[x.h,x.src]))});
     const okN=igResults.filter(r=>!r.brand).length,brandN=igResults.length-okN;
+    if(fr&&fr.stopped){gmMsg(`AI 提名 ${raw.length} 位、查到 ${gmSuggest.length} 個帳號，已驗證 ${okN} 位；還有 ${fr.stopped} 個帳號因為 Instagram 限制還沒驗證，恢復後這個頁面開著會自動接著驗證。`,'bad');return}
     gmMsg(`AI 提名 ${raw.length} 位、查到 ${gmSuggest.length} 個帳號，驗證後 ${okN} 位是真實存在的創作者${brandN?`，另有 ${brandN} 個判斷為品牌或店家（預設不勾選）`:''}；查不到的帳號（記錯、改名或個人帳號）列在結果下方的排除清單。`,okN?'ok':'bad');
   }catch(e){gmMsg(esc(e.message),'bad')}finally{btn.disabled=!GM_MODEL}
 }
