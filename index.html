@@ -886,6 +886,11 @@ function renderData(){
       <tr><td><code>main_age</code></td><td>主要受眾年齡：${AGES.join('、')}</td></tr>
       <tr><td><code>source</code></td><td>資料來源備註</td></tr>
     </table></div></div>
+    <div class="panel"><h3>整包備份與還原</h3>
+      <p class="hint">資料只存在這台裝置的瀏覽器。要換裝置（例如電腦換 iPad），先在原本的裝置按「匯出全部資料」，再到新裝置按「匯入全部資料」選那個檔案。包含 KOL、結案紀錄、模型校正、合作條件和候選人資料庫新增的帳號；不包含 API key 和權杖。</p>
+      <div class="inline" style="margin-top:10px"><button class="btn primary" id="bk-export">匯出全部資料</button><button class="btn" id="bk-import-btn">匯入全部資料</button><input type="file" id="bk-file" accept=".json,application/json" hidden></div>
+      <div class="msg" id="bk-msg" role="status"></div>
+    </div>
     <div class="panel"><h3>匯出與重設</h3>
       <div class="inline"><button class="btn" id="dl-page">下載這個網頁</button><button class="btn" id="dl-kols">匯出 KOL 資料（CSV）</button><button class="btn" id="dl-camps" ${state.campaigns.length?'':'disabled'}>匯出結案紀錄（CSV）</button></div>
       <textarea id="export-fallback" hidden aria-label="匯出內容" readonly></textarea>
@@ -910,6 +915,31 @@ function renderData(){
   document.getElementById('csv-file').onchange=ev=>{const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{document.getElementById('csv-text').value=r.result};r.readAsText(f,'utf-8')};
   document.getElementById('do-import').onclick=doImport;
   document.getElementById('dl-page').onclick=()=>offerFile('kol-decision.html',PRISTINE_HTML);
+  document.getElementById('bk-export').onclick=()=>{
+    const pack={app:'kol-decision',version:1,exportedAt:new Date().toISOString(),state};
+    const d=new Date(),stamp=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'-'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0');
+    offerFile(`kol-backup-${stamp}.json`,JSON.stringify(pack));
+  };
+  document.getElementById('bk-import-btn').onclick=()=>document.getElementById('bk-file').click();
+  document.getElementById('bk-file').onchange=ev=>{
+    const f=ev.target.files[0];if(!f)return;ev.target.value='';
+    const m=document.getElementById('bk-msg');m.className='msg';
+    const rd=new FileReader();
+    rd.onload=()=>{
+      let pack;try{pack=JSON.parse(String(rd.result).replace(/^\uFEFF/,''))}catch(e){m.className='msg bad';m.textContent='這個檔案讀不懂，請確認是用「匯出全部資料」產生的 .json 檔。';return}
+      const st=pack&&pack.app==='kol-decision'?pack.state:null;
+      if(!st||!Array.isArray(st.kols)){m.className='msg bad';m.textContent='這不是 KOL 系統的備份檔。';return}
+      const when=pack.exportedAt?new Date(pack.exportedAt).toLocaleString('zh-TW'):'未知時間';
+      const extra=Object.values(st.poolExtra||{}).reduce((n,v)=>n+v.length,0);
+      if(!confirm(`要用這個備份取代目前這台裝置的所有資料嗎？\n\n備份時間：${when}\nKOL：${st.kols.length} 位\n結案紀錄：${(st.campaigns||[]).length} 筆\n資料庫新增帳號：${extra} 個\n\n目前這台裝置的資料會被覆蓋。`))return;
+      st.poolExtra=st.poolExtra||{};st.removed=st.removed||[];st.campaigns=st.campaigns||[];
+      applyState(st);persist();renderAll();try{igPoolRender()}catch(e){}
+      const m2=document.getElementById('bk-msg');m2.className='msg ok';
+      m2.textContent=`已還原 ${when} 的備份：KOL ${state.kols.length} 位、結案紀錄 ${state.campaigns.length} 筆、資料庫新增帳號 ${extra} 個。`;
+      toast('已還原備份');
+    };
+    rd.readAsText(f,'utf-8');
+  };
   out.querySelectorAll('[data-restore]').forEach(b=>b.onclick=()=>{
     const r=state.removed.find(x=>x.key===b.dataset.restore);if(!r)return;
     state.removed=state.removed.filter(x=>x!==r);
@@ -984,6 +1014,12 @@ async function offerFile(name,content){
     const dl=window.claude&&window.claude.use?await window.claude.use('downloads'):null;
     if(dl){await dl.save({filename:name,data});toast('已下載 '+name);return}
   }catch(e){if(e&&e.code==='declined')return}
+  try{
+    const type=/\.json$/.test(name)?'application/json':/\.html$/.test(name)?'text/html':'text/csv';
+    const url=URL.createObjectURL(new Blob([/\.csv$/.test(name)?data:content],{type:type+';charset=utf-8'}));
+    const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);toast('已下載 '+name);return;
+  }catch(e){}
   const ta=document.getElementById('export-fallback');
   if(ta){ta.hidden=false;ta.value=content;ta.focus();ta.select();toast('這裡無法直接下載，請複製文字框內容存成 '+name)}
 }
